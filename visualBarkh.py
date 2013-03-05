@@ -48,7 +48,7 @@ try:
                 imageList = list(im.getdata())
                 sizeX, sizeY = im.size
                 return np.asanyarray(imageList).reshape(sizeY, sizeX)
-            
+
     isScikits = True
 except:
     isScikits = False
@@ -61,18 +61,17 @@ if isScikits:
     for plugin in mySeq:
         if plugin in keys:
             use = plugin
-            break
+
     try:
-        im_io.use_plugin(use, 'imshow')
-        print("Use plugin: %s" % use)
+        im_io.use_plugin('pil', 'imread')
     except:
         print("No plugin available between %s" % str(mySeq))
 else:
     print "Scikits.image not available"
 
+
 filters = {'gauss': nd.gaussian_filter, 'fouriergauss': nd.fourier_gaussian, \
            'median': nd.median_filter, 'wiener': signal.wiener}
-
 
 # Adjust the interpolation scheme to show the images
 mpl.rcParams['image.interpolation'] = 'nearest'
@@ -155,6 +154,7 @@ class StackImages:
         imageFileNames = glob.glob1(mainDir, pattern)
         # Sort it with natural keys
         imageFileNames.sort(key=natural_key)     
+
         if not len(imageFileNames):
             print "ERROR, no images in %s" % mainDir
             sys.exit()
@@ -205,6 +205,7 @@ class StackImages:
         self.shape = self.Array.shape 
         self.n_images, self.dimX, self.dimY = self.shape
         print "%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY)
+
         # Check for the grey direction
         grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
         grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
