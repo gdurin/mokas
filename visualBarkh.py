@@ -8,6 +8,7 @@ import numpy as np
 import numpy.ma as ma
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from gpuSwitchtime import get_gpuSwitchTime
 from colorsys import hsv_to_rgb
 #import tables
 import Image
@@ -16,12 +17,22 @@ import getLogDistributions as gLD
 reload(gLD)
 import getAxyLabels as gal
 reload(gal)
+
+# Check if pycuda is available
+try:
+    import pycuda.driver as driver
+    isPyCuda = True
+except:
+    isPyCuda = False
+
 # Load scikits modules if available
 try:
     from skimage.filter import tv_denoise
     isTv_denoise = True
+    filters['tv'] = tv_denoise   
 except:
     isTv_denoise = False
+    
 try:
     import skimage.io as im_io
     
@@ -41,6 +52,7 @@ try:
     isScikits = True
 except:
     isScikits = False
+    print "*********** There is no Scikits installed"
 
 if isScikits:
     plugins = im_io.plugins()
@@ -49,6 +61,7 @@ if isScikits:
     for plugin in mySeq:
         if plugin in keys:
             use = plugin
+            break
     try:
         im_io.use_plugin(use, 'imshow')
         print("Use plugin: %s" % use)
@@ -60,12 +73,15 @@ else:
 filters = {'gauss': nd.gaussian_filter, 'fouriergauss': nd.fourier_gaussian, \
            'median': nd.median_filter, 'wiener': signal.wiener}
 
-if isTv_denoise:
-    filters['tv'] = tv_denoise
 
 # Adjust the interpolation scheme to show the images
 mpl.rcParams['image.interpolation'] = 'nearest'
 
+def natural_key(string_):
+    """See http://www.codinghorror.com/blog/archives/001018.html"""
+    return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_)]
+
+# ###################################################################
 
 class StackImages:
     """
@@ -136,7 +152,9 @@ class StackImages:
         s = "(%s|%s)" % tuple(pattern.split("*"))
         patternCompiled = re.compile(s)
         # Load all the image filenames
-        imageFileNames = sorted(glob.glob1(mainDir, pattern))
+        imageFileNames = glob.glob1(mainDir, pattern)
+        # Sort it with natural keys
+        imageFileNames.sort(key=natural_key)     
         if not len(imageFileNames):
             print "ERROR, no images in %s" % mainDir
             sys.exit()
@@ -180,15 +198,16 @@ class StackImages:
                 print "Filter: %s" % filtering
                 if filtering == 'wiener':
                     sigma = [sigma, sigma]
-                self.Array = np.dstack([np.int16(filters[filtering](im,sigma)) for im in imageCollection])
+                #self.Array = np.dstack([np.int16(filters[filtering](im,sigma)) for im in imageCollection])
+                self.Array = np.array(tuple([np.int16(filters[filtering](im,sigma)) for im in imageCollection]))
         else:
-            self.Array = np.dstack([im for im in imageCollection])
+            self.Array = np.array(tuple([im for im in imageCollection]))
         self.shape = self.Array.shape 
-        self.dimX, self.dimY, self.n_images = self.shape
+        self.n_images, self.dimX, self.dimY = self.shape
         print "%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY)
         # Check for the grey direction
-        grey_first_image = scipy.mean(self.Array[:,:,0].flatten())
-        grey_last_image = scipy.mean(self.Array[:,:,-1].flatten())
+        grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
+        grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
         print "grey scale: %i, %i" % (grey_first_image, grey_last_image)
         if grey_first_image > grey_last_image:
             self.kernel = -self.kernel
@@ -201,7 +220,7 @@ class StackImages:
         """Get the n-th image"""
         index = self._getImageIndex(n)
         if index is not None:
-            return self.Array[:,:,index]
+            return self.Array[index]
 
     def _getImageIndex(self,n):
         """
@@ -234,6 +253,7 @@ class StackImages:
             im = self[imageNumber]
             if plugin == 'mpl':
                 plt.imshow(im, plt.cm.gray)
+                plt.show()
             else:
                 im_io.imshow(self[imageNumber])
         
@@ -300,7 +320,7 @@ class StackImages:
            The (x,y) pixel of the image, as (row, column)
         """
         x,y = pixel
-        return self.Array[x,y,:]
+        return self.Array[:,x,y]
         
     def showPixelTimeSequence(self,pixel=(0,0),newPlot=False):
         """
@@ -440,6 +460,7 @@ class StackImages:
             
         try:
             plt.imshow(self._imDiff(imNumbers, invert),plt.cm.gray)
+            plt.show()
         except:
             return
         
@@ -485,28 +506,36 @@ class StackImages:
         self._switchTimes
         self._switchSteps
         """
-        switchTimes = []
-        switchSteps = []
         startTime = time.time()
         # ####################
-        # TODO: make here a parallel calculus
-        for x in range(self.dimX):
-            # Print current row
-            if not (x+1)%10:
-                strOut = 'Analysing row:  %i/%i on %f seconds\r' % (x+1, self.dimX, time.time()-startTime)
-                sys.stderr.write(strOut)
-                #sys.stdout.flush()
-                startTime = time.time()
-            for y in range(self.dimY):
-                switch, levels = self.getSwitchTime((x,y))
-                grayChange = np.abs(levels[0]- levels[1])
-                if switch == 0: # TODO: how to deal with steps at zero time
-                    print x,y
-                switchTimes.append(switch)
-                switchSteps.append(grayChange)
-        print "\n"
-        self._switchTimes = np.asarray(switchTimes)
-        self._switchSteps = np.asarray(switchSteps)
+        if isPyCuda:
+            stack32 = np.asarray(imArray.Array, dtype=np.int32)
+            kernel32 = np.asarray(self.kernel, dtype=np.int32)
+            switchTimes, switchSteps = get_gpuSwitchTime(stack32, kernel32, device=1)
+            self._switchSteps = switchSteps.flatten()
+            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten()
+            print self._switchTimes
+            print 'Analysing done in %f seconds' % (time.time()-startTime)
+        else:
+            switchTimes = []
+            switchSteps = []            
+            for x in range(self.dimX):
+                # Print current row
+                if not (x+1)%10:
+                    strOut = 'Analysing row:  %i/%i on %f seconds\r' % (x+1, self.dimX, time.time()-startTime)
+                    sys.stderr.write(strOut)
+                    #sys.stdout.flush()
+                for y in range(self.dimY):
+                    switch, levels = self.getSwitchTime((x,y))
+                    grayChange = np.abs(levels[0]- levels[1])
+                    if switch == 0: # TODO: how to deal with steps at zero time
+                        print x,y
+                    switchTimes.append(switch)
+                    switchSteps.append(grayChange)
+            print "\n"
+            self._switchTimes = np.asarray(switchTimes)
+            self._switchSteps = np.asarray(switchSteps)
+            print self._switchTimes
         self._isColorImage = True
         self._isSwitchAndStepsDone = True
         return
@@ -660,7 +689,7 @@ class StackImages:
             #imOut = scipy.misc.toimage(self._colorImage)
             #imOut.save(fileName)
     
-    def _call_lambda(self,x,y):
+    def _call_pixel_switch(self,x,y):
         x, y = int(y+0.5), int(x+.5)
         if x >= 0 and x < self.dimX and y >= 0 and y < self.dimY:
             index = x * self.dimY + y
@@ -671,18 +700,24 @@ class StackImages:
             return None
             
     def _plotColorImage(self, data, colorMap, fig=None):
+        """
+        if the caption is not shown, just enlarge the image
+        as it depends on the length of the string retured by
+        _call_pixel_switch
+        """
         if fig == None:
             fig = plt.figure()
-            fig.set_size_inches(7,6,forward=True)
+            fig.set_size_inches(8,7,forward=True)
             ax = fig.add_subplot(1,1,1)
         else:
             plt.figure(fig.number)
             ax = fig.gca()
-        ax.format_coord = lambda x,y: self._call_lambda(x, y)
+        ax.format_coord = lambda x,y: self._call_pixel_switch(x, y)
         #ax.set_title(title)
         # Sets the limits of the image
         extent = 0, self.dimY - 1, self.dimX - 1, 0
-        plt.imshow(data, colorMap, norm=mpl.colors.NoNorm(), extent = extent)
+        plt.imshow(data, colorMap, norm=mpl.colors.NoNorm(), extent=extent)
+        plt.show()
         return fig
     
     def _plotHistogram(self, data):
@@ -700,7 +735,8 @@ class StackImages:
         plt.ylabel("Avalanche size (pixels)")
         for i in range(len(N)):
             patches[i].set_color((tuple(self._pColors[i])))
-        plt.show()    
+        plt.show()
+        return None
 
     def saveColorImage(self,fileName,threshold=None, palette='korean',noSwitchColor='black'):
         """
@@ -1025,9 +1061,16 @@ class StackImages:
     
 
 if __name__ == "__main__":
-    mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/MO/CoFe/50nm/20x/run5/", "Data1-*.tif", 280, 1029
-    mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/CoFe/50nm/20x/run5/", "Data1-*.tif", 280, 1029    
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/MO/CoFe/50nm/20x/run5/", "Data1-*.tif", 280, 1029
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/CoFe/50nm/20x/run5/", "Data1-*.tif", 280, 1029    
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run4 20x 20iter/", "Data4-*.tif", 80, 140    
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run5 20x 20iter EA/", "Data1-*.tif", 60, 90
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run10 20x 6iter 60sec/", "Data1-*.tif", 70, 300
+    mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run10 20x 6iter 60sec/", "Data1-*.tif", 670, 890
+    mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run9 20x 6iter 40sec/", "Data1-*.tif", 40, 220            
+    mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run9 20x 6iter 40sec/", "Data1-*.tif", 400, 620                     
     #mainDir, pattern, firstImage, lastImage  = "/media/DATA/meas/MO/Picostar/orig", "B*.TIF", 0, 99
+    #mainDir, pattern, firstImage, lastImage = "/media/DATA/meas/Barkh/Films/NiO-Fe/NiO80 run2 20x/", "Data4-*.tif", 70, 125
     
     imArray = StackImages(mainDir, pattern, resize_factor=False,\
                              filtering='gauss', sigma=1.5,\
