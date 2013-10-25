@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.ndimage as nd
 import pycuda.driver as driver
+import pycuda.tools as tools
 import pycuda.autoinit
 from pycuda.gpuarray import to_gpu
 from pycuda.compiler import SourceModule
@@ -25,8 +26,8 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
     # Set the card to work with
     ctx = driver.Device(device).make_context()
     used_device = ctx.get_device()
-    max_threads = used_device.get_attributes()[pycuda._driver.device_attribute.MAX_THREADS_PER_BLOCK]  
-    block_size = int(max_threads**0.5)
+    max_threads = tools.DeviceData(used_device).max_threads  
+    block_size = int(max_threads**0.5)/2
         
     kernel2 = np.array(-kernel, dtype=np.int32)
     if (len(kernel)%2==0):
@@ -40,10 +41,37 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
     len_kernel = np.int32(len_kernel)
     dim_z, dim_y, dim_x = stackImages.shape
     dim_Z, dim_Y, dim_X = np.int32(stackImages.shape)
+    block_X = 256
+    block_Y = 1
+    grid_X, grid_Y = (dim_x - 1) / block_X + 1, (dim_y - 1) / block_Y + 1
+    
     
     aMod = np.zeros(((dim_z+len_kernel-1), dim_y, dim_x), dtype=np.int32)
     switch = np.zeros((dim_y,dim_x), dtype=np.int32)
     levels = np.zeros((dim_y,dim_x), dtype=np.int32)
+    
+    #Host to Device copy
+    stack_gpu = to_gpu(stackImages)
+    kernel_gpu = to_gpu(kernel2)
+    switch_gpu = to_gpu(switch)
+    levels_gpu = to_gpu(levels)
+    aMod_gpu = to_gpu(aMod)    
+
+    # As an alternatice (longer)
+    #stack_gpu = driver.mem_alloc(stackImages.nbytes)
+    #kernel_gpu = driver.mem_alloc(kernel2.nbytes)
+    #switch_gpu = driver.mem_alloc(switch.nbytes)
+    #levels_gpu = driver.mem_alloc(levels.nbytes)
+    #aMod_gpu = driver.mem_alloc(aMod.nbytes)
+    
+    #driver.memcpy_htod(stack_gpu, stackImages)
+    #driver.memcpy_htod(kernel_gpu, kernel2)
+    #driver.memcpy_htod(switch_gpu, switch)
+    #driver.memcpy_htod(levels_gpu, levels)
+    #driver.memcpy_htod(aMod_gpu, aMod)
+    
+    
+    
     mod = SourceModule("""
 	__global__ void findconvolve1d(int *stack_gpu,int *kernel_gpu ,int *amod,int dim_x, int dim_y, int dim_z,int len_kernel,int origine)
 	{
@@ -132,24 +160,21 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
     # Get the array with the switching time
     func_findmin = mod.get_function("findmin")
 
-    #Host to Device copy
-    stack_gpu = to_gpu(stackImages)
-    kernel_gpu = to_gpu(kernel2)
-    switch_gpu = to_gpu(switch)
-    levels_gpu = to_gpu(levels)
-    aMod_gpu = to_gpu(aMod)
-
     #Function calls
-    func_findconvolve1d(stack_gpu, kernel_gpu, aMod_gpu, dim_X, dim_Y, dim_Z, len_kernel, origin, block=(block_size,block_size,1),
-         grid=((dim_x - 1) / block_size + 1, (dim_y - 1) / block_size + 1))
+    func_findconvolve1d(stack_gpu, kernel_gpu, aMod_gpu, dim_X, dim_Y, dim_Z, len_kernel, origin, block=(block_X, block_Y, 1),
+         grid=(grid_X, grid_Y))
 
-    func_findmin(stack_gpu, switch_gpu, levels_gpu, dim_X, dim_Y, dim_Z, len_kernel, block=(block_size,block_size,1),
-          grid=((dim_x - 1) / block_size + 1, (dim_y - 1) / block_size + 1))
+    func_findmin(stack_gpu, switch_gpu, levels_gpu, dim_X, dim_Y, dim_Z, len_kernel, block=(block_X, block_Y, 1),
+          grid=(grid_X, grid_Y))
 
     #Device to host copy
     switch = switch_gpu.get()
     levels = levels_gpu.get()
 
+    # As an alternative
+    #driver.memcpy_dtoh(switch, switch_gpu)
+    #driver.memcpy_dtoh(levels, levels_gpu)
+    
     #Free GPU memory
     stack_gpu.gpudata.free()
     switch_gpu.gpudata.free()
@@ -163,11 +188,12 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
 if __name__ == "__main__":
     import time
     # Prepare a 3D array of random data as int32
-    dim_x=64*5 + 1
-    dim_y=64*2 + 1 
-    dim_z=64*10 +1 
+    dim_x = 650
+    dim_y = 650 
+    dim_z = 80
     a = np.random.randn(dim_z,dim_y,dim_x)
     a = a.astype(np.int32)
+    print "Loading %.2f MB of data" % (a.nbytes/1e6)
     # Call the GPU kernel
     kernel = np.array([-1]*5+[1]*5)
     t0 = time.time()
@@ -177,6 +203,7 @@ if __name__ == "__main__":
     step = kernel
     cpuswitch=np.zeros((dim_y,dim_x),dtype=np.int32)
     cpulevels=np.zeros((dim_y,dim_x),dtype=np.int32)
+    print "Loading %.2f MB of data" % (2*cpuswitch.nbytes/1e6)
     t3=time.time()
     for i in range(0,dim_x):
         for j in range(0,dim_y):

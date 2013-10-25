@@ -1,7 +1,11 @@
-from pylab import load,  save,  loglog,  show
+"""
+This is the getLogDistributions module
+providing a few utilities to manipulate data
+for distributions in log scale
+"""
+
 import scipy
 import scipy.stats
-from scipy import array
 import numpy as np
 import itertools
 
@@ -40,7 +44,8 @@ def getLogBins(first_point, last_point, log_step):
     xbins = 10**center_of_bins_log_scale
     return xbins, bins
 
-def logDistribution(listValues, log_step=0.2, first_point=None, last_point=None, normed=True):
+def logDistribution(listValues, log_step=0.2, first_point=None, 
+                    last_point=None, normed=True):
     """
     Calculate the distribution in log scale from a list of values
     """
@@ -59,15 +64,18 @@ def logDistribution(listValues, log_step=0.2, first_point=None, last_point=None,
         yhist = yhist/scipy.sum(yhist)
     return xbins, yhist
     
-def averageLogDistribution(values, log_step=0.2, first_point=None, last_point=None):
+def averageLogDistribution(values, log_step=0.2, density=False,
+                           first_point=None, last_point=None):
     """
     calculates the <values> vs. xVariable in log scale
 
     Parameters:
     ---------------
     values : dict
+    
     A dictionary where the keys are the xValues
     and each element contains an array-like sequence of data
+
     Example:
     [1: array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
      2: array([1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2]),
@@ -75,6 +83,10 @@ def averageLogDistribution(values, log_step=0.2, first_point=None, last_point=No
     values : ndarray
     Two columns array of xValues and yValues,
     to be rearranged as above
+     
+    density: bool
+    Calculate the distribution as a density function
+    dividing by the width of the bin     
      
     Returns:
     center point of the bin, average value within the bin
@@ -112,6 +124,8 @@ def averageLogDistribution(values, log_step=0.2, first_point=None, last_point=No
             allElements = [val for val in itertools.chain(*yValues[q])]
             averageValue = sum(allElements)/float(len(allElements))
             #print averageValue, allElements
+            if density:
+                averageValue = averageValue/(j-i)
         yAverage.append(averageValue)
     yAverage =  np.asanyarray(yAverage)
     # Check if there are NaN values
