@@ -47,7 +47,7 @@ def getAxyLabels(labels, imageDir="Left_to_right", edgeThickness=1, fraction=Non
     elif imageDir == "Top_to_bottom":
         lrbt = top, bottom, left, right
     else:
-        raise ValueError, "avalanche direction not defined"
+        raise ValueError("avalanche direction not defined")
     # Find the sets
     # Select the labels contained in the edges
     #setLrbt = set(left+right+bottom+top)
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     #a = a.repeat(100,axis=0)
     #a = a.repeat(66,axis=1)
     labels, n = nd.label(a, structure)
-    print labels
+    print(labels)
     list_sizes = nd.sum(a, labels, range(1,n+1))
     array_sizes = scipy.array(list_sizes,dtype='int16')
     array_Axy = getAxyLabels(labels,'Bottom_to_top', edgeThickness=1, fraction=0.5)
@@ -91,5 +91,5 @@ if __name__ == "__main__":
         d[Axy] = scipy.concatenate((d.get(Axy,a0),sizes))
     
     for i, results in enumerate(zip(array_sizes,array_Axy)):
-        print i+1, results
-    print "Done in %.3f s" % (time.time()-startTime)
+        print(i+1, results)
+    print("Done in %.3f s" % (time.time()-startTime))

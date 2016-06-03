@@ -48,6 +48,11 @@ def logDistribution(listValues, log_step=0.2, first_point=None,
                     last_point=None, normed=True):
     """
     Calculate the distribution in log scale from a list of values
+    Returns:
+    --------------
+    X : array of the x values at the center (in log-scale) of the bin
+    Y : array of the y values at the center (in log-scale) of the bin
+    Yerr :  array of the y errors, calculated by a binomial distribution
     """
     # Check the list of Values
     if not checkIfVoid(listValues):
@@ -56,13 +61,17 @@ def logDistribution(listValues, log_step=0.2, first_point=None,
         first_point = scipy.amin(listValues)
     if not last_point:
         last_point = scipy.amax(listValues)
-    xbins, bins = getLogBins(first_point, last_point, log_step)
-    yhist = scipy.stats.stats.histogram2(listValues, bins)
-    deltas = bins[1:]-bins[:-1]
-    yhist = yhist[:-1]/deltas
+    X, Xbins = getLogBins(first_point, last_point, log_step)
+    Y = scipy.stats.stats.histogram2(listValues, Xbins)
+    deltas = Xbins[1:]-Xbins[:-1]        # Check if zeros occurs
+    bool0 = Y!=0
+    for ary in [X,Y,deltas]:
+        ary = scipy.compress(bool0, ary)      
+    Y = Y[:-1]/deltas
+    Yerr = (Y * (1. - Y/sum(Y)))**0.5 / (deltas*sum(Y))
     if normed:
-        yhist = yhist/scipy.sum(yhist)
-    return xbins, yhist
+        Y = Y/scipy.sum(Y)
+    return X, Y, Yerr
     
 def averageLogDistribution(values, log_step=0.2, density=False,
                            first_point=None, last_point=None):

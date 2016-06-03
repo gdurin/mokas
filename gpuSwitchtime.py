@@ -193,7 +193,7 @@ if __name__ == "__main__":
     dim_z = 80
     a = np.random.randn(dim_z,dim_y,dim_x)
     a = a.astype(np.int32)
-    print "Loading %.2f MB of data" % (a.nbytes/1e6)
+    print("Loading %.2f MB of data" % (a.nbytes/1e6))
     # Call the GPU kernel
     kernel = np.array([-1]*5+[1]*5)
     t0 = time.time()
@@ -203,16 +203,15 @@ if __name__ == "__main__":
     step = kernel
     cpuswitch=np.zeros((dim_y,dim_x),dtype=np.int32)
     cpulevels=np.zeros((dim_y,dim_x),dtype=np.int32)
-    print "Loading %.2f MB of data" % (2*cpuswitch.nbytes/1e6)
+    print("Loading %.2f MB of data" % (2*cpuswitch.nbytes/1e6))
     t3=time.time()
     for i in range(0,dim_x):
         for j in range(0,dim_y):
             indice=(nd.convolve1d(a[:,j,i],step,mode='reflect')).argmin()      
             cpuswitch[j,i]=indice
     timeCpu = time.time()-t3
-    print ("GPU calculus done = %.4f s" %timeGpu)
-    print ("CPU calculus done = %.4f s" %timeCpu)
-    print "Difference on switch : \n"
-    print gpuswitch-cpuswitch
-    
-    print ("\nGPU is %d times faster than CPU " %(timeCpu/timeGpu))
+    print("GPU calculus done = %.4f s" %timeGpu)
+    print("CPU calculus done = %.4f s" %timeCpu)
+    print("Difference on switch : \n")
+    print(gpuswitch-cpuswitch)
+    print("\nGPU is %d times faster than CPU " %(timeCpu/timeGpu))
