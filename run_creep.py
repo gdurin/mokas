@@ -121,6 +121,8 @@ class Creep:
 		print(".",end="")
 		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=True) # Contours
 		self.figs.append(self.fig3)
+		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=True) # Contours
+		self.figs.append(self.fig3b)
 		print(".",end="")
 		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True) # Displacements (absolute)
 		self.figs.append(self.fig4)
@@ -172,6 +174,9 @@ class Creep:
 			# Calculate the contours
 			imArray.find_contours(lines_color='k',remove_bordering=True,
 				plot_centers_of_mass=True, fig=self.fig3,ax=self.axs3[i,j],title=title)
+			imArray.find_contours(remove_bordering=True,reference='center_of_mass',rescale_area=True,
+				fig=self.fig3b,ax=self.axs3b[i,j],title=title)
+
 			self.all_contours[Bx] = imArray.contours
 			self.all_centers[Bx] = imArray.centers_of_mass
 			center = imArray.centers_of_mass[0] # Center of mass of the initial domain 
@@ -305,7 +310,7 @@ def isIniFile(filename):
 
 
 if __name__ == "__main__":
-	myChoice = ['Sim','PtCoAu50Pt50','PtCoAuPt'][2]
+	myChoice = ['Sim','PtCoAu50Pt50','PtCoAuPt','PtCoPt'][1]
 	if myChoice == 'PtCoAu50Pt50':
 		#iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_exp.ini"
 		iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/45 degree/PtCoAuPt_exp.ini"
@@ -315,10 +320,16 @@ if __name__ == "__main__":
 		#Bxs = Bxs[:3]
 
 	elif myChoice == 'PtCoAuPt':
-		#iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_exp.ini"
-		iniFilepath = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoAuPt_exp.ini"
+		iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_exp.ini"
 		# Select the OoP field
 		Bz = 0.657
+
+	elif myChoice == 'PtCoPt':
+		#iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_exp.ini"
+		iniFilepath = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_exp.ini"
+		# Select the OoP field
+		Bz = 0.657
+
 
 	elif myChoice == 'Sim':
 		iniFilepath = "/home/gf/Meas/Creep/Simulations/disorder_sim.ini"

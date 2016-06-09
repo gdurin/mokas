@@ -207,7 +207,7 @@ class StackImages:
 
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
-                 filtering=None, sigma=None, halfWidthKrn=8,
+                 filtering=None, sigma=None, halfWidthKrn=5,
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, structure=None):
         """
@@ -248,7 +248,7 @@ class StackImages:
         # Good for White_to_Black change of grey scale
         #self.kernel0 = np.array([-1] * halfWidthKrn + [0] + [1] * halfWidthKrn)
         self.kernel0 = np.array([-2] * halfWidthKrn + [-1, 0, 1] + [2] * halfWidthKrn)
-        self.kernel = self.kernel0
+        #self.kernel = self.kernel0
 
         if not os.path.isdir(self._mainDir):
             print("Please check you dir %s" % self._mainDir)
@@ -1759,8 +1759,8 @@ sel
 
     def find_contours(self,lines_color=None,invert_y_axis=True,step_image=1,
                         initial_domain_region=None,remove_bordering=False,
-                        plot_centers_of_mass = False,
-                        reference = None, fig=None,ax=None,title=None):
+                        plot_centers_of_mass = False, reference = None, 
+                        rescale_area = False, fig=None,ax=None,title=None):
         """
         Find the contours of the sequence of DW displacements
         This is suitable for DW bubble expansion experiments
@@ -1796,16 +1796,19 @@ sel
         self.contours[0] = cnts0
         self.bubbles[0] = central_domain
         self.centers_of_mass[0] = (yc,xc)
+        if rescale_area:
+            scaling = size_central_domain**0.5
+        else:
+            scaling = 1.
         X,Y = cnts0[:,1], cnts0[:,0]
         if reference == 'center_of_mass':
-            X,Y = X-xc, Y-yc
+            X,Y = (X-xc)/scaling, (Y-yc)/scaling
             ax.plot(0,0,'o',color=lines_color)
         else:
+            X, Y = X/scaling, Y/scaling
             ax.plot(xc,yc,'o',color=lines_color)
-        if lines_color is not None:
-            ax.plot(X,Y,lines_color,antialiased=True,lw=2)
-        else:
-            ax.plot(X,Y,antialiased=True,lw=2)
+        # The nucleated domain is always black
+        ax.plot(X,Y,'k',antialiased=True,lw=2)
         # Plot the center of mass of the nucleated domain
 
         sw = np.unique(self._switchTimes2D)
@@ -1827,6 +1830,7 @@ sel
                 central_domain = im == index_central_domain + 1
             else:
                 central_domain = im == 1
+                size_central_domain = np.sum(central_domain)
             # Get the properties
             try:
                 properties = measure.regionprops(central_domain)[0]
@@ -1850,8 +1854,13 @@ sel
             y,x = nd.measurements.center_of_mass(central_domain)
             self.bubbles[switch] = central_domain
             self.centers_of_mass[switch] = (y,x)
+            n_images = self.sw[-1]-self.sw[self.n_first]
+            n = float(switch-self.sw[self.n_first])
+            clr = self._getKoreanColors(n, n_images)
+            #print(n, clr)
+            clr = tuple([c/255. for c in clr])
             if plot_centers_of_mass and reference is None:
-                ax.plot(x,y,'o')
+                ax.plot(x,y,'o',c=clr)
             #plt.plot(x,y,'o')
             try:
                 cnts = measure.find_contours(central_domain,.5)[0]
@@ -1862,27 +1871,36 @@ sel
             # TODO: the contour changes drastically when two walls merge. How to fix it?
             self.contours[switch] = cnts 
             if not k%step_image:
+                if rescale_area:
+                    scaling = size_central_domain**0.5
+                    lw = 1.
+                else:
+                    scaling = 1.
+                    lw = 0.5
                 X,Y = cnts[:,1], cnts[:,0]
                 if reference == 'center_of_mass':
-                    X,Y = X-x, Y-y
-                if lines_color is not None:
-                    ax.plot(X,Y,lines_color,antialiased=True,lw=.5)
+                    X, Y = (X-x)/scaling, (Y-y)/scaling
                 else:
-                    ax.plot(X,Y,antialiased=True,lw=0.5)
+                    X, Y = X/scaling, Y/scaling
+                if lines_color is not None:
+                    ax.plot(X,Y,lines_color,antialiased=True,lw=lw)
+                else:
+                    ax.plot(X,Y,c=clr,antialiased=True,lw=lw)
         # Plot the refence lines
         alpha = np.pi/10
         #ax.axis(axs)
         if reference == 'center_of_mass':
-            axs = (-xc,self.dimY-xc,self.dimX-yc,-yc)
+            axs = (-xc/scaling,(self.dimY-xc)/scaling,(self.dimX-yc)/scaling,-yc/scaling)
             polar.plot_rays(center=(0,0),step_angle=alpha,ax=ax,axis_limits=axs)    
         else:
-            axs = (0,self.dimY,self.dimX,0)
+            axs = (0,self.dimY/scaling,self.dimX/scaling,0)
             polar.plot_rays(center=(xc,yc),step_angle=alpha,ax=ax,axis_limits=axs)
         if invert_y_axis:
             ax.invert_yaxis()
             #ax.set_aspect('equal')
         if title:
             ax.set_title(title)
+        ax.axis('equal')
         plt.show()
         return
         
@@ -2039,30 +2057,72 @@ if __name__ == "__main__":
         imArray.structure = np.ones((NN,NN))
         imArray.showColorImage(10,palette='random')
     elif choice=="Creep":
-        k = 4
+        k = int(sys.argv[2])
+        print k
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_2c-0d-100pOe-0.975V-1.2s"
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/90 degree/PtCoAuPt_3_2c-90d-350pOe-0.780V-3.5s_6"
         if k == 0:
-            rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-500pOe-0.780V-2.8s_18"
+            rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-000nOe-0.780V-5.0s_1"
             imParameters['imCrop'] = (0,510,0,672)
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 15
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 2.1
-            threshold = 52
-        if k == 1:
-            rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/45 degree/PtCoAuPt_3_2c-45d-350pOe-0.780V-4.2s_13"
+            imParameters['sigma'] = 1.1
+            threshold = 50
+        elif k == 1:
+            rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-350pOe-0.780V-4.3s_11"
+            print(rootDir)
             imParameters['imCrop'] = (0,510,0,672)
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 21
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 1.5
-            threshold = 50
+            imParameters['sigma'] = 2.0
+            threshold = 40
         #rootDir = "/home/gf/Meas/Creep/PtCoAu/PtCoAu_2c-0d-500pOe-1.275V-1.0s"
+        elif k == 22:
+            rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-000nOe-0.657V-40.0s_1"
+            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['pattern'] = "filename*.png"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 144
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1.5
+            threshold = 25
+        elif k == 23:
+            rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-100nOe-0.657V-30.0s_18"
+            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['pattern'] = "filename*.png"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 89
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1.5
+            threshold = 25
+        elif k == 24:
+            rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-100pOe-0.657V-30.0s_19"
+            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['pattern'] = "filename*.png"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 88
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1.5
+            threshold = 25
+        elif k == 25:
+            rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-1000nOe-0.657V-10.0s_32"
+            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['pattern'] = "filename*.png"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 41
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2.
+            threshold = 25
         elif k == 2:
             rootDir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
             imParameters['pattern'] = "img*.tif"
@@ -2072,10 +2132,10 @@ if __name__ == "__main__":
             imParameters['imCrop'] = (0,800,0,1200)
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 1.5
+            imParameters['sigma'] = 2.5
             threshold = 8
         elif k == 3:
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/run3/02_nonirradiatedFilm_0.14A"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Half-moon/run3/02_nonirradiatedFilm_0.14A"
             #imParameters['imCrop'] = (200,1040,500,1390)
             imParameters['imCrop'] = (0,1392,0,1040)
             imParameters['pattern'] = "02_nonirradiatedFilm_0.14A_MMStack_Pos0.ome.tif"
@@ -2096,7 +2156,9 @@ if __name__ == "__main__":
             #imParameters['filtering'] = None
             imParameters['sigma'] = 1.
             threshold = 20
-            
+        else:
+            print("Check the path!")
+            sys.exit()
         imParameters['resize_factor'] = None
 
         #imParameters['imCrop'] = (70,460,210,580)
