@@ -313,7 +313,7 @@ if __name__ == "__main__":
 	myChoice = ['Sim','PtCoAu50Pt50','PtCoAuPt','PtCoPt'][1]
 	if myChoice == 'PtCoAu50Pt50':
 		#iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_exp.ini"
-		iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/45 degree/PtCoAuPt_exp.ini"
+		iniFilepath = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_exp.ini"
 		# Select the OoP field
 		Bz = 0.780
 		#Bz = 0.975 # In Volts
