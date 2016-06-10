@@ -361,7 +361,11 @@ class StackImages:
 
     def _filtering_collection(self, imageCollection, filtering, sigma=1.5):
         # Filter the images
-        if filtering:
+        if filtering is 'None':
+            filtering = None
+        if filtering is None:
+            array_filtered = np.array(tuple([im for im in imageCollection]))
+        else:
             filtering = filtering.lower()
             if filtering not in filters:
                 print("Filter not available")
@@ -374,8 +378,6 @@ class StackImages:
                     array_filtered = np.array(tuple([binary(im) for im in imageCollection]))
                 else:
                     array_filtered = np.array(tuple([np.int16(filters[filtering](im,sigma)) for im in imageCollection]))
-        else:
-            array_filtered = np.array(tuple([im for im in imageCollection]))
         return array_filtered
 
     def _filtering_array(self, data, filtering, sigma):
