@@ -70,80 +70,16 @@ except:
     print("*********** There is no Scikits-image installed")
     sys.exit()
 
-if isScikits:    
-    class Imread_convert():
-        """
-        Class to read images with PIL
-        with check in the available image mode
-        Also loading tiff sequence using
-        the tiffile library, so the output size
-        is (n_images, dimX, dimY)
-        """
-        def __init__(self, mode, resize_factor=None, imCrop=None):
-            self.mode = mode
-            self.resize_factor = resize_factor
-            self.crop = imCrop
-
-        def __call__(self, f):
-            if self.mode=='RGB':
-                # This gives a 32-float of grey
-                im = im_io.imread(f, as_grey=True)
-                im = np.array(im*255, dtype=np.int16)
-            elif self.mode == '.tif':
-                with tifffile.TiffFile(f) as tif:
-                    # im = (n_images, dimX, dimY)
-                    im = tif.asarray()
-                im = np.array(im, dtype=np.int16)
-                print(im.shape)
-                if self.crop is not None:
-                    n, rows, cols = im.shape
-                    xmin,xmax,ymin,ymax = self.crop
-                    im = im[:,rows-ymax:rows-ymin,xmin:xmax]
-                    print(im.shape)
-                if self.resize_factor:
-                    print("Resize is not available in tiff images, sorry")
-                    print("Do you really need it? ")
-                return im
-            elif self.mode == '.avi':
-                from videos import from_avi
-                im = get_array_from_avi(f)
-                print(im.shape)
-                if self.crop is not None:
-                    n, rows, cols = im.shape
-                    xmin,xmax,ymin,ymax = self.crop
-                    im = im[:,rows-ymax:rows-ymin,xmin:xmax]
-                    print(im.shape)
-                if self.resize_factor:
-                    print("Resize is not available in avi videos, sorry")
-                    print("Do you really need it? ")
-                return im
-            else:
-                im = Image.open(f)
-                sizeX, sizeY = im.size
-                if self.resize_factor:
-                    sizeX, sizeY = sizeX/self.resize_factor, sizeY/self.resize_factor
-                    im = im.resize((sizeX, sizeY), Image.NEAREST)
-                imageList = list(im.getdata())
-                im = np.asanyarray(imageList).reshape(sizeY, sizeX)
-            if self.crop is not None:
-                xmin,xmax,ymin,ymax = self.crop
-                im = im[xmin:xmax,ymin:ymax]
-            return im
-
-    plugins = im_io.available_plugins
-    keys = plugins.keys()
-    mySeq = ['gtk', 'pil', 'matplotlib', 'qt']
-    for plugin in mySeq:
-        if plugin in keys:
-            use = plugin
-
-    try:
-        im_io.use_plugin('pil', 'imread')
-    except:
-        print("No plugin available between %s" % str(mySeq))
-else:
-    print("Scikits.image not available")
-
+plugins = im_io.available_plugins
+keys = plugins.keys()
+mySeq = ['gtk', 'pil', 'matplotlib', 'qt']
+for plugin in mySeq:
+    if plugin in keys:
+        use = plugin
+try:
+    im_io.use_plugin('pil', 'imread')
+except:
+    print("No plugin available between %s" % str(mySeq))
 
 
 # Adjust the interpolation scheme to show the images
@@ -289,120 +225,6 @@ class StackImages:
             self.kernel = -self.kernel
             self.kernel0 = -self.kernel0
 
-    def collect_images(self, pattern, 
-                       firstIm, lastIm, 
-                       resize_factor, imCrop, 
-                       filtering=None, sigma=None):
-        """
-        Here we assume that pattern or i) contains a "*" so it is taken as a real pattern so that
-        all the images with that filename are loaded, and
-        ii) it contains a sequence of images
-        """
-        if "*" in pattern:
-            # Collect the list of images in mainDir
-            self.imageNumbers, imageFileNames, imageMode = self.get_image_names(self._mainDir, pattern, firstIm, lastIm)
-            imread_convert = Imread_convert(imageMode,resize_factor,imCrop)
-            # Load the images
-            print("Loading images: ")
-            load_pattern = [os.path.join(self._mainDir,ifn) for ifn in imageFileNames]
-            # Collect the images
-            self.imageCollection = im_io.ImageCollection(load_pattern, load_func=imread_convert)
-            # Filter and return
-            return self._filtering_collection(self.imageCollection, filtering, sigma)
-        else:
-            # Here we assume that the file contains a collection of images, as in tiff
-            basename, extension = os.path.splitext(pattern)
-            if extension == '.tif' or extension == '.avi':
-                print("Reading the tif file. Please hold on")
-                imread_convert = Imread_convert(extension,resize_factor,imCrop)
-                filename = os.path.join(self._mainDir, pattern)
-                data = imread_convert(filename)
-                if lastIm == '-1':
-                    data = data[firstIm:]
-                else:
-                    data = data[firstIm:lastIm+1]
-                n, sizeX, sizeY = data.shape
-                self.imageNumbers = range(firstIm, firstIm + n)
-                if filtering:
-                    data = self._filtering_array(data, filtering, sigma)
-                    print("filtering...")
-                print("Done")
-                return data
-            else:
-                print("Not loading data, please check the type of file")
-                sys.exit()
-
-
-
-    def get_image_names(self,mainDir,pattern,firstIm,lastIm):
-        """
-        get the filenames for a collection of images with a pattern
-        """   
-        s = "(%s|%s)" % tuple(pattern.split("*"))
-        patternCompiled = re.compile(s)
-        # Load all the image filenames
-        imageFileNames = glob.glob1(self._mainDir, pattern)
-        # Sort it with natural keys
-        imageFileNames.sort(key=natural_key)
-
-        if not len(imageFileNames):
-            print("ERROR, no images in %s" % mainDir)
-            sys.exit()
-        else:
-            print("Found %d images in %s" % (len(imageFileNames), self._mainDir))
-        # Search the number of all the images given the pattern above
-        if pattern[0]!="*":
-            image_numbers = [int(patternCompiled.sub("", fn)) for fn in imageFileNames]
-        else:
-            # To do: solve for a more general case (now works for cecilia files)
-            image_numbers = [int(fn[:3]) for fn in imageFileNames]
-        # Search the indexes of the first and the last images to load
-        if firstIm is None:
-            firstIm = image_numbers[0]
-        if lastIm < 0:
-            lastIm = len(image_numbers) + lastIm + firstIm
-        try:
-            iFirst, iLast = image_numbers.index(firstIm), image_numbers.index(lastIm)
-        except:
-            i0, i1 = image_numbers[0], image_numbers[-1]
-            out = (i0, i1, firstIm, lastIm)
-            print("Error: range of the images is %s-%s (%s-%s chosen)" % out)
-            sys.exit()
-        print("First image: %s, Last image: %s" % (imageFileNames[iFirst], imageFileNames[iLast]))
-        imageFileNames = imageFileNames[iFirst:iLast + 1]
-        # Save the list of numbers of the images to be loaded
-        imageNumbers = image_numbers[iFirst:iLast + 1]
-        # Check the mode of the images
-        fname = os.path.join(mainDir, imageFileNames[iFirst])
-        #print(fname)
-        imageOpen = Image.open(fname)
-        imageMode = imageOpen.mode
-        return imageNumbers, imageFileNames, imageMode
-
-    def _filtering_collection(self, imageCollection, filtering, sigma=1.5):
-        # Filter the images
-        if filtering is 'None':
-            filtering = None
-        if filtering is None:
-            array_filtered = np.array(tuple([im for im in imageCollection]))
-        else:
-            filtering = filtering.lower()
-            if filtering not in filters:
-                print("Filter not available")
-                sys.exit()
-            else:
-                print("Filter: %s" % filtering)
-                if filtering == 'rof':
-                    array_filtered = np.array(tuple([denoise(im) for im in imageCollection]))
-                elif filtering == 'binary':
-                    array_filtered = np.array(tuple([binary(im) for im in imageCollection]))
-                else:
-                    array_filtered = np.array(tuple([np.int16(filters[filtering](im,sigma)) for im in imageCollection]))
-        return array_filtered
-
-    def _filtering_array(self, data, filtering, sigma):
-        data = filters[filtering](data,sigma)
-        return data
 
     def __get__(self):
         return self.Array
