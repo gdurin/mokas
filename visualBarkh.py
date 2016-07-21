@@ -22,6 +22,7 @@ import mahotas
 #import h5py
 import tables
 import polar
+import collect_images
 
 NNstructure = np.asanyarray([[0, 1, 0], [1,1,1], [0,1,0]])
 
@@ -92,8 +93,8 @@ if isScikits:
                 with tifffile.TiffFile(f) as tif:
                     # im = (n_images, dimX, dimY)
                     im = tif.asarray()
-                    im = np.array(im, dtype=np.int16)
-                    print(im.shape)
+                im = np.array(im, dtype=np.int16)
+                print(im.shape)
                 if self.crop is not None:
                     n, rows, cols = im.shape
                     xmin,xmax,ymin,ymax = self.crop
@@ -101,6 +102,19 @@ if isScikits:
                     print(im.shape)
                 if self.resize_factor:
                     print("Resize is not available in tiff images, sorry")
+                    print("Do you really need it? ")
+                return im
+            elif self.mode == '.avi':
+                from videos import from_avi
+                im = get_array_from_avi(f)
+                print(im.shape)
+                if self.crop is not None:
+                    n, rows, cols = im.shape
+                    xmin,xmax,ymin,ymax = self.crop
+                    im = im[:,rows-ymax:rows-ymin,xmin:xmax]
+                    print(im.shape)
+                if self.resize_factor:
+                    print("Resize is not available in avi videos, sorry")
                     print("Do you really need it? ")
                 return im
             else:
@@ -256,8 +270,11 @@ class StackImages:
             sys.exit()
 
         #############################################################################
-        self.Array = self.collect_images(pattern, firstIm, lastIm, resize_factor, imCrop, 
-            filtering, sigma)
+        #self.Array = self.collect_images(pattern, firstIm, lastIm, resize_factor, imCrop, 
+        #    filtering, sigma)
+        self.Array, self.imageNumbers = \
+        collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, resize_factor, imCrop, 
+            filtering, sigma, subtract=0)
 
         ##############################################################################
         self.shape = self.Array.shape
@@ -272,7 +289,10 @@ class StackImages:
             self.kernel = -self.kernel
             self.kernel0 = -self.kernel0
 
-    def collect_images(self, pattern, firstIm, lastIm, resize_factor, imCrop, filtering=None, sigma=None):
+    def collect_images(self, pattern, 
+                       firstIm, lastIm, 
+                       resize_factor, imCrop, 
+                       filtering=None, sigma=None):
         """
         Here we assume that pattern or i) contains a "*" so it is taken as a real pattern so that
         all the images with that filename are loaded, and
@@ -292,7 +312,7 @@ class StackImages:
         else:
             # Here we assume that the file contains a collection of images, as in tiff
             basename, extension = os.path.splitext(pattern)
-            if extension == '.tif':
+            if extension == '.tif' or extension == '.avi':
                 print("Reading the tif file. Please hold on")
                 imread_convert = Imread_convert(extension,resize_factor,imCrop)
                 filename = os.path.join(self._mainDir, pattern)

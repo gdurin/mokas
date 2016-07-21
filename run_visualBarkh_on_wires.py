@@ -71,9 +71,9 @@ class Wires:
                                    fig=self.fig1,ax=self.axs1[n],title=title,noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2,ax=self.axs2[n],title=title,ylabel=None)
-            imArray.find_contours(lines_color='k',remove_bordering=True,plot_centers_of_mass=False,
-                                     invert_y_axis=True, plot_rays=False,
-                                     fig=self.fig3,ax=self.axs3[n],title=title)
+            imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
+                                     invert_y_axis=False, plot_rays=False,
+                                     fig=self.fig3, ax=self.axs3[n], title=title)
         # Out of the loop
         for fig in self.figs:
             fig.suptitle(self.rootDir,fontsize=30)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         imParameters['lastIm'] = 250
         imParameters['filtering'] = 'gauss'
         #imParameters['filtering'] = None
-        imParameters['sigma'] = 1.
+        imParameters['sigma'] = 0.5
         imParameters['resize_factor'] = None
         threshold = 30
     elif choice == 'non_irr':
@@ -105,7 +105,6 @@ if __name__ == "__main__":
             print("Chech the path")
             sys.exit()
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
-
         #imParameters['imCrop'] = (0,1392,0,1040)
         imParameters['imCrop'] = (1000,1392,100,1040)
         #imParameters['imCrop'] = (876,1117,0,1040)
@@ -134,10 +133,10 @@ if __name__ == "__main__":
         imParameters['lastIm'] = 300
         imParameters['filtering'] = 'gauss'
         #imParameters['filtering'] = None
-        imParameters['sigma'] = 1.
+        imParameters['sigma'] = 1.5
         imParameters['resize_factor'] = None
-        threshold = 20
-        wires = Wires(rootDir, subdir_pattern, filename_suffix, imParameters,threshold, experiments=range(6))
+        threshold = 10
+        wires = Wires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=range(2))
         wires.plot_results()
     else:
         print("Check the path!")

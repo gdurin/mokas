@@ -199,12 +199,12 @@ if __name__ == "__main__":
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 74
             imParameters['initial_domain_region'] = (639,432,658,443)
-            imParameters['imCrop'] = (0,800,0,1200)
+            #imParameters['imCrop'] = (0,800,0,1200)
+            imParameters['imCrop'] = None
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 24
-            .5
-            threshold = 8
+            imParameters['sigma'] = 2.5
+            threshold = 5
         elif k == 3:
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Half-moon/run3/02_nonirradiatedFilm_0.14A"
             #imParameters['imCrop'] = (200,1040,500,1390)
