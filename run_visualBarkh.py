@@ -230,6 +230,7 @@ if __name__ == "__main__":
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
             imParameters['sigma'] = 2.
+            imParameters['subtract'] = 0 # Subtract the first image
             threshold = 8
         elif k == 31:
             n = "01"

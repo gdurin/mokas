@@ -159,7 +159,8 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, halfWidthKrn=5,
                  boundary=None, imCrop=False, 
-                 initial_domain_region=None, structure=None):
+                 initial_domain_region=None, structure=None,
+                 subtract=None):
         """
         Initialized the class
         """
@@ -210,7 +211,7 @@ class StackImages:
         #    filtering, sigma)
         self.Array, self.imageNumbers = \
         collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, resize_factor, imCrop, 
-            filtering, sigma, subtract=0)
+            filtering, sigma, subtract=subtract)
 
         ##############################################################################
         self.shape = self.Array.shape
