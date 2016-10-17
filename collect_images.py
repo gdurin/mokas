@@ -135,6 +135,7 @@ class Images:
             for n, image in enumerate(self.images):
                 self.images[n] = self._image_filter(image)
         self.imageNumbers = range(frames)
+        assert len(self.images) == len(self.imageNumbers)
 
     def _image_crop(self, crop_limits):
         """
@@ -207,7 +208,7 @@ class Images:
         self.from_type()
         if self.mode != 'pat':          
             if self.firstIm != 0 or self.lastIm != -1:
-                self.images = self.images[self.firstIm : self.lastIm]
+                self.images = self.images[self.firstIm : self.lastIm + 1]
         if self.crop is not None:
             print("Original image size: ", self.images.shape)
             self._image_crop(self.crop)
@@ -217,10 +218,11 @@ class Images:
         # if self.filtering:
         #     print("Filtering with %s..." % self.filtering)
         #     self._image_filter(self.filtering, self.sigma)
+        assert len(self.images) == len(self.imageNumbers)
         return self.images, self.imageNumbers
 
 def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, crop=None, 
-                filtering=None, sigma=None, subtract=None):
+                filtering=None, sigma=None, subtract=None, adjust_gray_level=True):
     """
     subtract: int or None
         Subtract image # as background
@@ -228,7 +230,11 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, cr
     im = Images(root_dir, pattern, firstIm, lastIm, resize_factor, crop, filtering, sigma)
     images, imageNumbers = im.collector()
     if subtract is not None:
-        images = images[1:] - images[subtract]
+        # TODO: fix the way the gray level is renormalized
+        # This is too rude!
+        images = images[subtract+1:] - images[subtract] + mean(images[subtract])
+        imageNumbers = imageNumbers[subtract+1:]
+    assert len(images) == len(imageNumbers)
     return images, imageNumbers
 
 

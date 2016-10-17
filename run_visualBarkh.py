@@ -129,6 +129,7 @@ if __name__ == "__main__":
     elif choice=="Creep":
         k = int(sys.argv[2])
         print k
+        palette = 'pastel'
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_2c-0d-100pOe-0.975V-1.2s"
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/90 degree/PtCoAuPt_3_2c-90d-350pOe-0.780V-3.5s_6"
         if k == 0:
@@ -216,6 +217,34 @@ if __name__ == "__main__":
             #imParameters['filtering'] = None
             imParameters['sigma'] = 1.
             threshold = 30
+        elif k == 30:
+            n = "02"
+            current = "18"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/%s_irradiatedFilm_0.%sA_10fps" % (n, current)
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "%s_irradiatedFilm_0.%sA_10fps_MMStack_Pos0.ome.tif" % (n,current)
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = 249
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2.
+            threshold = 8
+        elif k == 31:
+            n = "01"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Moon/run6/%s_nonirradiatedFilm_0.15A_10fps" % n
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "%s_nonirradiatedFilm_0.15A_10fps_MMStack_Pos0.ome.tif" % n
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = 249
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2.
+            threshold = 8
+            palette ='korean'
         elif k == 4:
             rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps"
             imParameters['imCrop'] = (0,1392,0,1040)
@@ -231,7 +260,7 @@ if __name__ == "__main__":
             print("Check the path!")
             sys.exit()
         imParameters['resize_factor'] = None
-
+        print(imParameters['pattern'])
         #imParameters['imCrop'] = (70,460,210,580)
         #imParameters['imCrop'] = (60,460,162,512)
         #imParameters['imCrop'] = (0,510,0,672)
@@ -248,8 +277,9 @@ if __name__ == "__main__":
         p2p = 3 # Pixel to pixel (linear) distance for cluster detection
         NN = 2*p2p + 1
         imArray.structure = np.ones((NN,NN))
-        imArray.showColorImage(threshold,palette='pastel',plot_contours=False)
-        #imArray.find_contours(lines_color='k',remove_bordering=True, plot_centers_of_mass=True,reference=None)
+        imArray.showColorImage(threshold,palette=palette,plot_contours=False)
+        imArray.find_contours(lines_color=None, remove_bordering=True, plot_centers_of_mass=False,
+            plot_rays=False, reference=None,invert_y_axis=True)
             #'center_of_mass')
 
     else:

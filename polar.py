@@ -21,6 +21,10 @@ def r_ellipse_center_on_focus(theta,a,b):
 		return (b*b/a)/(1-np.cos(theta)*ecc)
 
 def cart2polar(xy,origin=(0,0),swope_xy=False, reverse_y=True,ordered=True):
+	"""
+	transform cartesian coordinates into polar ones
+	Angle is in radiants
+	"""
 	if swope_xy:
 		yc,xc = origin
 		x,y = (xy[:,1] - xc), (xy[:,0] -yc)
