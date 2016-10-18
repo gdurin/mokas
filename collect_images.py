@@ -74,6 +74,20 @@ class Images:
             basename, extension = os.path.splitext(self.pattern)
             return extension[1:]
 
+    def _set_limits(self, images, n):
+        """
+        load the images within the firstIm and lastIm
+        chosen by the user
+        n is the # of images
+        """
+        if self.firstIm == None:
+            self.firstIm = 0
+        if self.lastIm == -1 or self.lastIm > n-1:
+            self.lastIm = n - 1
+        images = images[self.firstIm:self.lastIm+1]
+        imageNumbers = range(self.firstIm, self.lastIm+1)
+        return images, imageNumbers
+
     def _imread_convert(self,f):
         """
         function to read and filter images
@@ -130,12 +144,17 @@ class Images:
             self.images = tif.asarray()
         assert self.images.shape == (frames, height, width)
         self.images = self.images.astype(np.int16)
+        self.images, self.imageNumbers = self._set_limits(self.images, frames)
+        try:
+            assert len(self.images) == len(self.imageNumbers)
+        except AssertionError as e:
+            print(e)
+            print("n. of images: %i") % len(self.images)
+            print("Len of imageNumbers: %i") % len(self.imageNumbers)
         # Filtering
         if self.filtering:
             for n, image in enumerate(self.images):
                 self.images[n] = self._image_filter(image)
-        self.imageNumbers = range(frames)
-        assert len(self.images) == len(self.imageNumbers)
 
     def _image_crop(self, crop_limits):
         """
@@ -218,7 +237,12 @@ class Images:
         # if self.filtering:
         #     print("Filtering with %s..." % self.filtering)
         #     self._image_filter(self.filtering, self.sigma)
-        assert len(self.images) == len(self.imageNumbers)
+        try:
+            assert len(self.images) == len(self.imageNumbers)
+        except AssertionError:
+            print("Assertion error")
+            print("n. of images: %i") % len(self.images)
+            print("Len of imageNumbers: %i") % len(self.imageNumbers)
         return self.images, self.imageNumbers
 
 def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, crop=None, 
@@ -232,7 +256,7 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, cr
     if subtract is not None:
         # TODO: fix the way the gray level is renormalized
         # This is too rude!
-        images = images[subtract+1:] - images[subtract] + mean(images[subtract])
+        images = images[subtract+1:] - images[subtract] + np.mean(images[subtract])
         imageNumbers = imageNumbers[subtract+1:]
     assert len(images) == len(imageNumbers)
     return images, imageNumbers
