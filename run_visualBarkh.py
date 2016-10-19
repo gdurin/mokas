@@ -218,8 +218,8 @@ if __name__ == "__main__":
             imParameters['sigma'] = 1.
             threshold = 30
         elif k == 30:
-            n = "02"
-            current = "18"
+            n = "01"
+            current = "16"
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/%s_irradiatedFilm_0.%sA_10fps" % (n, current)
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A

@@ -326,12 +326,22 @@ class StackImages:
             print('Method not implement yet')
             return None
         try:
-            leftLevel = np.int(np.mean(pxTimeSeq[lowPoint:switch - 1*(kernel=='zero')])+0.5)
-            rigthLevel = np.int(np.mean(pxTimeSeq[switch:highPoint])+0.5)
+            leftLevel = np.int(np.mean(pxTimeSeq[lowPoint:switch - 1*(kernel=='zero')]) + 0.5)
+            rigthLevel = np.int(np.mean(pxTimeSeq[switch:highPoint]) + 0.5)
             levels = leftLevel, rigthLevel
         except:
+            print("Warning, levels could not be calculated, assumed 0,0")
             levels = (0,0)
         return levels
+
+    def _pixel2rowcol(self, pixel, closest_integer=False):
+        """
+        Transforn from pixel values to (row, col)
+        calculating the integer values if needed
+        """
+        if closest_integer:
+            pixel = int(round(pixel[0])), int(round(pixel[1]))
+        return pixel[1], pixel[0]
 
 
     def pixelTimeSequence(self,pixel=(0,0)):
@@ -345,10 +355,10 @@ class StackImages:
         pixel : tuple
            The (x,y) pixel of the image, as (row, column)
         """
-        x,y = pixel
+        x,y = self._pixel2rowcol(pixel)
         return self.Array[:,x,y]
 
-    def showPixelTimeSequence(self,pixel=(0,0),newPlot=False, show_kernel=True):
+    def showPixelTimeSequence(self, pixel=(0,0), newPlot=False, show_kernel=True):
         """
         pixelTimeSequenceShow(pixel)
 
@@ -357,7 +367,7 @@ class StackImages:
         Parameters:
         ---------------
         pixel : tuple
-            The (x,y) pixel of the image, as (row, column)
+            The (x,y) pixel of the image
         newPlot : bool
             Option to open a new frame or use the last one
         show_kernel : bool
@@ -729,6 +739,7 @@ sel
         # Calculate the switch time Array (2D) considering the threshold and the start from zero
         fillValue = -1
         self._switchTimes2D = self._getSwitchTimesOverThreshold(False, fillValue).reshape(self.dimX, self.dimY)
+        self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
         if fillValue in self._switchTimes2D:
             self._switchTimesUnique = np.unique(self._switchTimes2D)[1:] + self.min_switch
         else:
@@ -769,7 +780,7 @@ sel
                 self._colorMap, self._figColorImage,title=title,figsize=figsize)
             fig = self._figColorImage
         else:
-            fig = self._plotColorImage(data,colorMap=self._colorMap,fig=fig,ax=ax,title=title)
+            fig = self._plotColorImage(data, colorMap=self._colorMap, fig=fig, ax=ax, title=title)
         if plot_contours:
             if ax is None:
                 ax = fig.gca()
@@ -786,17 +797,19 @@ sel
         print("There are %d (%.2f %%) switched and %d (%.2f %%) not-switched pixels" % swPrint)
         plt.show()
 
-    def _call_pixel_switch(self,x,y):
+    def _call_pixel_switch(self, pixel):
+        # TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        pixel = int(round(pixel[0] + 0.5)), int(round(pixel[1] + 0.5))
         x, y = int(y+0.5), int(x+.5)
         if x >= 0 and x < self.dimX and y >= 0 and y < self.dimY:
             index = x * self.dimY + y
             s = "pixel (%i,%i) - switch at: %i, gray step: %i" % \
-                (x, y, self._switchTimes[index], self._switchSteps[index])
+                (pixel, y, self._switchTimes[index], self._switchSteps[index])
             return s
         else:
             return None
 
-    def _plotColorImage(self,data,colorMap,fig=None,ax=None,title=None,figsize=(8,7)):
+    def _plotColorImage(self, data, colorMap,fig=None, ax=None, title=None, figsize=(8,7)):
         """
         if the caption is not shown, just enlarge the image
         as it depends on the length of the string retured by
