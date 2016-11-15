@@ -229,23 +229,28 @@ if __name__ == "__main__":
             imParameters['lastIm'] = 249
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 2.
+            imParameters['sigma'] = .5
             imParameters['subtract'] = 0 # Subtract the first image
             threshold = 8
         elif k == 31:
-            n = "01"
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Moon/run6/%s_nonirradiatedFilm_0.15A_10fps" % n
+            n = "03"
+            current = "15"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Moon/run6/%s_nonirradiatedFilm_0.%sA_10fps" % (n,current)
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            crop_upper_left_pixel = (100,50)
+            crop_lower_right_pixel = (1200,1000)
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
             imParameters['imCrop'] = None
-            imParameters['pattern'] = "%s_nonirradiatedFilm_0.15A_10fps_MMStack_Pos0.ome.tif" % n
+            imParameters['pattern'] = "%s_nonirradiatedFilm_0.%sA_10fps_MMStack_Pos0.ome.tif" % (n,current)
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
-            imParameters['lastIm'] = 249
+            imParameters['lastIm'] = -1
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = 2.
-            threshold = 8
-            palette ='korean'
+            imParameters['sigma'] = 5
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 7
+            #palette ='korean'
         elif k == 4:
             rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps"
             imParameters['imCrop'] = (0,1392,0,1040)
@@ -266,21 +271,14 @@ if __name__ == "__main__":
         #imParameters['imCrop'] = (60,460,162,512)
         #imParameters['imCrop'] = (0,510,0,672)
         
-
+        imParameters['kernel_half_width_of_ones'] = 10
+        imParameters['kernel_internal_points'] = 3
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         imArray = bk.StackImages(**imParameters)
-        imArray.width='all'
-        imArray.useKernel = 'both'
-        imArray.kernelSign = -1
-        #imArray.useKernel = 'zero'
-        imArray.imageDir = "Left_to_right"
-        imArray.boundary = None
-        p2p = 3 # Pixel to pixel (linear) distance for cluster detection
-        NN = 2*p2p + 1
-        imArray.structure = np.ones((NN,NN))
-        imArray.showColorImage(threshold,palette=palette,plot_contours=False)
-        imArray.find_contours(lines_color=None, remove_bordering=True, plot_centers_of_mass=False,
-            plot_rays=False, reference=None,invert_y_axis=True)
+        
+        imArray.showColorImage(threshold, palette=palette, plot_contours=False)
+        #imArray.find_contours(lines_color=None, remove_bordering=True, plot_centers_of_mass=False,
+        #    plot_rays=False, reference=None,invert_y_axis=True)
             #'center_of_mass')
 
     else:

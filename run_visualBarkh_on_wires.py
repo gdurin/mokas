@@ -71,9 +71,9 @@ class Wires:
                                    fig=self.fig1,ax=self.axs1[n],title=title,noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2,ax=self.axs2[n],title=title,ylabel=None)
-            imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
-                                     invert_y_axis=False, plot_rays=False,
-                                     fig=self.fig3, ax=self.axs3[n], title=title)
+            #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
+                                     #invert_y_axis=False, plot_rays=False,
+                                     #fig=self.fig3, ax=self.axs3[n], title=title)
         # Out of the loop
         for fig in self.figs:
             fig.suptitle(self.rootDir,fontsize=30)
@@ -89,7 +89,11 @@ if __name__ == "__main__":
     if choice == 'half_moon':
         rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Half-moon/run3/02_nonirradiatedFilm_0.14A"
         #imParameters['imCrop'] = (200,1040,500,1390)
-        imParameters['imCrop'] = (0,1392,0,1040)
+        #imParameters['imCrop'] = (0,1392,0,1040)
+        crop_upper_left_pixel = (0,0)
+        crop_lower_right_pixel = (1392,1040)
+        imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+        #imParameters['imCrop'] = None
         imParameters['pattern'] = "02_nonirradiatedFilm_0.14A_MMStack_Pos0.ome.tif"
         imParameters['firstIm'] = 1
         imParameters['lastIm'] = 250
@@ -106,7 +110,11 @@ if __name__ == "__main__":
             sys.exit()
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
         #imParameters['imCrop'] = (0,1392,0,1040)
-        imParameters['imCrop'] = (1000,1392,100,1040)
+        #imParameters['imCrop'] = (1000,1392,100,1040)
+        crop_upper_left_pixel = (1000,100)
+        crop_lower_right_pixel = (1392,1040)
+        imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+        #imParameters['imCrop'] = None
         #imParameters['imCrop'] = (876,1117,0,1040)
         filename_suffix = "_MMStack_Pos0.ome.tif"
         #imParameters['pattern'] = "01_irradiatedwires_%sA_10fps_MMStack_Pos0.ome.tif" % set_current
@@ -126,11 +134,15 @@ if __name__ == "__main__":
         subdir_pattern = "*_irradiatedwires_%sA_10fps"  % set_current
 
         #imParameters['imCrop'] = (0,1392,0,1040)
-        imParameters['imCrop'] = (876,1117,0,1040)
+        #imParameters['imCrop'] = (876,1117,0,1040)
+        crop_upper_left_pixel = (880,0)
+        crop_lower_right_pixel = (1115,1040)
+        imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+        #imParameters['imCrop'] = None
         filename_suffix = "_MMStack_Pos0.ome.tif"
         #imParameters['pattern'] = "01_irradiatedwires_%sA_10fps_MMStack_Pos0.ome.tif" % set_current
-        imParameters['firstIm'] = 30
-        imParameters['lastIm'] = 300
+        imParameters['firstIm'] = 1
+        imParameters['lastIm'] = 240
         imParameters['filtering'] = 'gauss'
         #imParameters['filtering'] = None
         imParameters['sigma'] = 1.5

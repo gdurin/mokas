@@ -23,7 +23,10 @@ import mahotas
 import tables
 import polar
 import collect_images
+import kernel
 
+p2p = 3 # Pixel to pixel (linear) distance for cluster detection
+NN = 2*p2p + 1
 NNstructure = np.asanyarray([[0, 1, 0], [1,1,1], [0,1,0]])
 
 def denoise(im):
@@ -146,8 +149,23 @@ class StackImages:
        for 'tv': denoising weight
        for 'wiener': A scalar or an N-length list as size of the Wiener filter
        window in each dimension.
-       
-    boundary : 'open' or None; 'periodic'
+    
+    Kernel: is the (step-like) function to calculate the correlation 
+    with the sequence of grey levels. 
+    The transition from -1 to 1 or from 1 to -1 is calculated on the base of the 
+    sequence of the images, taken the first and the last gray average levels.
+    The simple form is a step function, where:
+    kernel_half_width (int) is the number of points at left (-1) and at the right (+1)
+    kernel_internal_points is the number of point between the -1 and -1;
+    kernel_internal_points = 0 (default) : step function
+    kernel_internal_points = 1 : [-1, -1, -1, 0, +1, +1, +1]
+    kernel_internal_points = 2 : [-1, -1, -1, -0.33, +0.33, +1, +1, +1]
+    kernel_internal_points = 3 : [-1, -1, -1, -0.5, 0, +0.5, +1, +1, +1]
+    kernel_internal_points = 4 : [-1, -1, -1, -0.6, -0.2, +0.2, +0.6, +1, +1, +1]
+    kernel_internal_points = 5 : [-1, -1, -1, -0.66, -0.33, 0, +0.33, 0.66, +1, +1, +1]
+
+    boundary : 'open' or None; 'periodic' What is this?
+
 
     imCrop : 4-element tuple
        Crop the image
@@ -157,10 +175,10 @@ class StackImages:
 
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
-                 filtering=None, sigma=None, halfWidthKrn=5,
+                 filtering=None, sigma=None, 
+                 kernel_half_width_of_ones = 5, kernel_internal_points = 0,
                  boundary=None, imCrop=False, 
-                 initial_domain_region=None, structure=None,
-                 subtract=None):
+                 initial_domain_region=None, subtract=None):
         """
         Initialized the class
         """
@@ -184,23 +202,18 @@ class StackImages:
         self.figRawAndCalc = None
         self.imagesRange = (firstIm, lastIm)
         self.imageDir = None
-        self.structure = structure
+        self.structure = NNstructure
         self.initial_domain_region = initial_domain_region
         self.is_find_contours = False
+        self.isTwoImages = False
         if boundary == 'periodic':
             self.boundary = 'periodic'
         else:
             self.boundary = None
         if not lastIm:
             lastIm = -1
-        # Make a kernel as a step-function
-        # Good for Black_to_White change of grey scale
-        self.kernel = np.array([-1] * halfWidthKrn + [1] * halfWidthKrn)
-        # Good for White_to_Black change of grey scale
-        #self.kernel0 = np.array([-1] * halfWidthKrn + [0] + [1] * halfWidthKrn)
-        self.kernel0 = np.array([-2] * halfWidthKrn + [-1, 0, 1] + [2] * halfWidthKrn)
-        #self.kernel = self.kernel0
 
+        # Check paths
         if not os.path.isdir(self._mainDir):
             print("Please check you dir %s" % self._mainDir)
             print("Path not found")
@@ -219,13 +232,18 @@ class StackImages:
         print("%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY))
 
         # Check for the grey direction
+        # and calculate the kernel
         grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
         grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
         print("grey scale: %i, %i" % (grey_first_image, grey_last_image))
         if grey_first_image > grey_last_image:
-            self.kernel = -self.kernel
-            self.kernel0 = -self.kernel0
-
+            kernel_start = 1.
+        else:
+            kernel_start = -1.
+        # Make a kernel as a step-function
+        self.kernel = kernel.get_kernel(kernel_half_width_of_ones, kernel_internal_points, start = kernel_start)
+        self.kernel_half_width_of_ones = kernel_half_width_of_ones
+        self.kernel_internal_points = kernel_internal_points
 
     def __get__(self):
         return self.Array
@@ -373,38 +391,55 @@ class StackImages:
         show_kernel : bool
             Show the kernel (step function) in the plot
         """
-        width = self._getWidth()
-        # Plot the temporal sequence first
-        pxt = self.pixelTimeSequence(pixel)
         if not self._figTimeSeq or newPlot==True:
             self._figTimeSeq = plt.figure()
         else:
             plt.figure(self._figTimeSeq.number)
         ax = plt.gca()
+        # Plot the temporal sequence first
+        pxt = self.pixelTimeSequence(pixel)
         ax.plot(self.imageNumbers,pxt,'-o')
+        # Add the calculus of GPU
+        row, col = self._pixel2rowcol(pixel)
+        switch = self._switchTimes2D[row, col]
+        step = self._switchSteps2D[row, col]
+        # Plot the step-like function
+        l0 = self.kernel_half_width_of_ones
+        l1 = self.kernel_internal_points
+        pxt_average = np.mean(pxt[switch - (l0+l1)/2:switch + (l0+l1)/2 +1]) # to check
+        print("switch at %i, gray level change = %i" % (switch, step))
+        kernel = self.kernel * step / 2 + pxt_average
+        # This is valid for the step kernel ONLY
+        x =  np.arange(switch - (l0+l1/2), switch + (l0+l1/2) + l1%2)
+        
+        ax.plot(x, kernel, '-o')
+
+        # The code below assumed to have two kernels;
+        # Now it is no longer used. To be erase in the near future
+        # =================================================================
         # Add the two kernels function
-        kernels = [self.kernel, self.kernel0]
-        for k,kernel in enumerate(['step','zero']):	
-            switch, (value_left, value_right) = self.getSwitchTime(pixel, useKernel=kernel)
-            print("switch %s, Kernel = %s" % (kernel, switch))
-            print(("gray level change at switch = %s") % abs(value_left-value_right))
-            if not show_kernel:
-                break
-            if width == 'small':
-                halfWidth = len(kernels[k])/2
-                x0,x1 = switch - halfWidth - 1*(k==1), switch + halfWidth
-                x = range(x0,x1)
-                n_points_left = halfWidth
-                n_points_rigth = halfWidth
-            elif width=='all':
-                #x = range(len(pxt))
-                x = self.imageNumbers
-                n_points_left = (switch-x[0]) - 1 * (k==1)
-                n_points_right = len(x) - (switch - x[0])
-                y = n_points_left * [value_left] + [(value_left+value_right)/2.]\
-                    *(k==1) + n_points_right * [value_right]
-                print(len(x), len(y))
-            ax.plot(x,y)
+        # kernels = [self.kernel, self.kernel0]
+        # for k,kernel in enumerate(['step','zero']):	
+        #     switch, (value_left, value_right) = self.getSwitchTime(pixel, useKernel=kernel)
+        #     print("switch %s, Kernel = %s" % (kernel, switch))
+        #     print(("gray level change at switch = %s") % abs(value_left-value_right))
+        #     if not show_kernel:
+        #         break
+        #     if width == 'small':
+        #         halfWidth = len(kernels[k])/2
+        #         x0,x1 = switch - halfWidth - 1*(k==1), switch + halfWidth
+        #         x = range(x0,x1)
+        #         n_points_left = halfWidth
+        #         n_points_rigth = halfWidth
+        #     elif width=='all':
+        #         #x = range(len(pxt))
+        #         x = self.imageNumbers
+        #         n_points_left = (switch-x[0]) - 1 * (k==1)
+        #         n_points_right = len(x) - (switch - x[0])
+        #         y = n_points_left * [value_left] + [(value_left+value_right)/2.]\
+        #             *(k==1) + n_points_right * [value_right]
+        #         print(len(x), len(y))
+        # =================================================================
         plt.show()
 
     def getSwitchTime(self, pixel=(0,0), useKernel='step', method='convolve1d'):
@@ -447,14 +482,6 @@ class StackImages:
                 else:
                     switch = switchZeroKernel
                     kernel_to_use = 'zero'
-                    #leftLevel = np.int(np.mean(pxTimeSeq[0:switch])+0.5)
-                    #rightLevel = np.int(np.mean(pxTimeSeq[switch+1:])+0.5)
-                    #middle = (leftLevel+rightLevel)/2
-                    #rightLevelStep = np.int(np.mean(pxTimeSeq[switchStepKernel+1:])+0.5)
-                    #if abs(pxTimeSeq[switch]-middle)>abs(pxTimeSeq[switch]-rightLevelStep):
-                        #switch = switchStepKernel
-                    #switch = (switch-1)*(pxTimeSeq[switch]<middle)+switch*(pxTimeSeq[switch]>=middle)
-                #switch = switchStepKernel * (minStepKernel<=minZeroKernel/1.1) + switchZeroKernel * (minStepKernel >minZeroKernel/1.1)
         else:
             raise RuntimeError("Method not yet implemented")
         levels = self._getLevels(pxTimeSeq, switch, kernel_to_use)
@@ -546,6 +573,14 @@ class StackImages:
         It calculates:
         self._switchTimes
         self._switchSteps
+
+        Calculus of switch times.
+        Assume a kernel from +1 to -1, for reference
+        if kernel is a step function, switch is the last point at +1
+        so we need to add 1 to switch
+        If kernel has points between +1 and -1,
+        i.e. self.kernel_internal_points is not 0
+        we need to add int(self.kernel_internal_points/2) + 1
         """
         if kernel is None:
             kernel = self.kernel
@@ -575,7 +610,8 @@ class StackImages:
                         switchTimes = np.vstack((switchTimes, switch))
                         switchSteps = np.vstack((switchSteps, step))
             self._switchSteps = switchSteps.flatten()
-            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten() + 1
+            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten() 
+            self._switchTimes += self.kernel_internal_points/2 + 1 
             print('Analysing done in %f seconds' % (time.time()-startTime))
         else:
             switchTimes = []
@@ -797,14 +833,12 @@ sel
         print("There are %d (%.2f %%) switched and %d (%.2f %%) not-switched pixels" % swPrint)
         plt.show()
 
-    def _call_pixel_switch(self, pixel):
-        # TODO !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        pixel = int(round(pixel[0] + 0.5)), int(round(pixel[1] + 0.5))
-        x, y = int(y+0.5), int(x+.5)
+    def _call_pixel_switch(self, p0, p1):
+        x, y = self._pixel2rowcol((p0,p1), closest_integer=True) 
         if x >= 0 and x < self.dimX and y >= 0 and y < self.dimY:
             index = x * self.dimY + y
             s = "pixel (%i,%i) - switch at: %i, gray step: %i" % \
-                (pixel, y, self._switchTimes[index], self._switchSteps[index])
+                (p0, p1, self._switchTimes2D[x,y], self._switchSteps2D[x,y])
             return s
         else:
             return None
@@ -823,7 +857,7 @@ sel
             fig = plt.figure(fig.number)
             if ax is None:
                 ax = fig.gca()
-        ax.format_coord = lambda x,y: self._call_pixel_switch(x, y)
+        ax.format_coord = lambda p0,p1: self._call_pixel_switch(p0, p1)
         # Sets the limits of the image
         extent = 0, self.dimY, self.dimX, 0
 
@@ -834,7 +868,8 @@ sel
         ax.imshow(data, cmap=colorMap, norm=self.norm)
         ax.axis(extent)
         if title is None:
-            title = "DW motion from image %i to image %i" % self.imagesRange
+            first, last = self.imagesRange
+            title = "DW motion from image %i to image %i" % (self.imageNumbers[first], self.imageNumbers[last])
         ax.title.set_text(title)
         plt.show()
         return fig
@@ -923,6 +958,7 @@ sel
         """
         key = str(event.key).lower()
         print(event)
+        self.ax0_axis = self.figRawAndCalc.axes[0].axis()
         if key != 'n' and key != 'p' and key!= "a":
             return
         if key == "a":
@@ -1011,7 +1047,7 @@ sel
         
 
     def showRawAndCalcImages(self, nImage=None, preAvalanches=True, 
-                isTwoImages=False, subtract_first_image=False):
+                isTwoImages=False, subtract_first_image=False,autoscale=False):
         """
         show the Raw and the Calculated image n
         Automatically increases the values of the image
@@ -1041,7 +1077,6 @@ sel
         else:
             self.nImage = nImage
 
-        self.isTwoImages = isTwoImages
         # Subtract first image
         if subtract_first_image:
             self.subtract_first_image = True
@@ -1053,7 +1088,7 @@ sel
         else:
             rows, cols = 2,3
 
-        if self.figRawAndCalc:
+        if self.figRawAndCalc and self.isTwoImages==isTwoImages:
             plt.figure(self.figRawAndCalc.number)
             axs = self.figRawAndCalc.get_axes()
             axs = np.array(axs).reshape((rows,cols))
@@ -1066,6 +1101,8 @@ sel
             self.figRawAndCalc.set_size_inches((10*rows,5*rows))
             if isTwoImages:
                 self.figRawAndCalc.set_facecolor('black')
+                self.isTwoImages = isTwoImages
+            self.ax0_axis = None
         # Prepare the color map of calculated avalanches
         switchTimes_images = self._getSwitchTimesOverThreshold(False, fillValue=0).\
             reshape(self.dimX, self.dimY) == self.nImage
@@ -1096,7 +1133,10 @@ sel
                 ax.imshow(im, plt.cm.gray)
                 ax.set_title("Raw Image %i" % (self.nImage-1+i))
                 ax.grid(color='blue', ls="-")
-        ax.axis((0, self.dimY, self.dimX, 0))
+        if autoscale:
+            ax.axis((0, self.dimY, self.dimX, 0))
+        elif self.ax0_axis is not None:
+            ax.axis(self.ax0_axis)
         # Add the calculated avalanches to the first raw image
         if not isTwoImages:
             #plt.subplot(2,3,3)
@@ -1118,7 +1158,10 @@ sel
             ax.imshow(self._imDiff((self.nImage,self.nImage-1)), plt.cm.gray)
             ax.set_title("Diff. Image %s and Image %s" % (self.nImage, self.nImage-1))
             ax.grid(color='blue', ls="-")
-            ax.axis((0, self.dimY, self.dimX, 0))
+            if autoscale:
+                ax.axis((0, self.dimY, self.dimX, 0))
+            elif self.ax0_axis is not None:
+                ax.axis(self.ax0_axis)
             
             # Show the raw difference images and the calculated avalanches
             ax1 = axs[1,1]
@@ -1127,7 +1170,11 @@ sel
             # Use find_contours
             for n, contour in enumerate(contours):
                 ax1.plot(contour[:, 1], contour[:, 0], linewidth=1, color='r')
-            ax1.axis((0, self.dimY, self.dimX, 0))
+            if autoscale:
+                ax1.axis((0, self.dimY, self.dimX, 0))
+            elif self.ax0_axis is not None:
+                ax1.axis(self.ax0_axis)
+        
             # Use canny filter
             #edges1 = skfilters.canny(switchTimes_images*1000, 1)
             #myMap = mpl.colors.ListedColormap([(1,1,1),(1,1,0)],'mymap',2)
@@ -1161,7 +1208,11 @@ sel
         else:
             ax2.xaxis.set_visible(False)
             ax2.yaxis.set_visible(False)
-        ax2.axis((0, self.dimY, self.dimX, 0))
+        if autoscale:
+            ax2.axis((0, self.dimY, self.dimX, 0))
+        elif self.ax0_axis is not None:
+            ax2.axis(self.ax0_axis)
+        
         plt.draw()
         plt.show()
         print("Press: Next, Previous, sAve")

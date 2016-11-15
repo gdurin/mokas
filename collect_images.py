@@ -57,7 +57,7 @@ class Images:
         self.sigma = sigma
         self.mode = self._set_mode()
         #print(self.mode)
-        if self.mode == 'pat':
+        if self.mode == 'pattern':
             self.from_type = self._from_pattern
         elif self.mode == 'avi':
             self.from_type = self._from_avi
@@ -69,7 +69,7 @@ class Images:
 
     def _set_mode(self):
         if "*" in self.pattern:
-            return 'pat'
+            return 'pattern'
         else:
             basename, extension = os.path.splitext(self.pattern)
             return extension[1:]
@@ -142,13 +142,23 @@ class Images:
             height = tif.micromanager_metadata['summary']['Height']
             width = tif.micromanager_metadata['summary']['Width']
             self.images = tif.asarray()
-        assert self.images.shape == (frames, height, width)
+        try:
+            assert self.images.shape == (frames, height, width)
+            print("TIFF Images loaded...")
+        except AssertionError:
+            print("Assertion error")
+            print("TIFF Images loading...FAILED")
+            print(frames, height, width)
+            print(self.images.shape)
+            sys.exit()
         self.images = self.images.astype(np.int16)
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
             assert len(self.images) == len(self.imageNumbers)
+            print("Checking length... OK")
         except AssertionError as e:
             print(e)
+            print("Checking lenght... Failed")
             print("n. of images: %i") % len(self.images)
             print("Len of imageNumbers: %i") % len(self.imageNumbers)
         # Filtering
@@ -159,10 +169,13 @@ class Images:
     def _image_crop(self, crop_limits):
         """
         crop limits are in the image reference frame (not of array)
+        has to be a list of two pixels,
+        i.e. [crop_upper_left_pixel,crop_lower_right_pixel]
         """
         n, rows, cols = self.images.shape
-        xmin, xmax, ymin, ymax = crop_limits
-        self.images = self.images[:, rows - ymax : rows - ymin, xmin : xmax]
+        [(col_min,row_min),(col_max,row_max)] = crop_limits
+        #xmin, xmax, ymin, ymax = crop_limits
+        self.images = self.images[:, row_min : row_max, col_min : col_max]
 
     def _image_resize(self, resize_factor):
         print("Resize is not available in tiff images, sorry")
@@ -225,9 +238,10 @@ class Images:
     def collector(self):
         # Upload the images
         self.from_type()
-        if self.mode != 'pat':          
+        if self.mode != 'pattern':          
             if self.firstIm != 0 or self.lastIm != -1:
                 self.images = self.images[self.firstIm : self.lastIm + 1]
+                self.imageNumbers = self.imageNumbers[self.firstIm : self.lastIm + 1]
         if self.crop is not None:
             print("Original image size: ", self.images.shape)
             self._image_crop(self.crop)
