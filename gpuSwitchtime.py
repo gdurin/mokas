@@ -73,7 +73,7 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
     
     
     mod = SourceModule("""
-	__global__ void findconvolve1d(int *stack_gpu,int *kernel_gpu ,int *amod,int dim_x, int dim_y, int dim_z,int len_kernel,int origine)
+	__global__ void findconvolve1d(int *stack_gpu, int *kernel_gpu, int *amod, int dim_x, int dim_y, int dim_z, int len_kernel, int origine)
 	{
 	  int idx = threadIdx.x + blockIdx.x * blockDim.x; 
 	  int idy = threadIdx.y + blockIdx.y * blockDim.y; 
@@ -135,7 +135,7 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
 
 
 	}
-	__global__ void findmin(int *stack_gpu,int *switch_gpu,int *levels_gpu, int dim_x, int dim_y, int dim_z, int len_kernel)
+	__global__ void findmin(int *stack_gpu, int *switch_gpu, int *levels_gpu, int dim_x, int dim_y, int dim_z, int len_kernel)
 	{
 	int len_kernel_half = len_kernel/2;
 	int idx = threadIdx.x + blockIdx.x * blockDim.x; 

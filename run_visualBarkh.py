@@ -281,7 +281,7 @@ if __name__ == "__main__":
         ##############################
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         imArray = bk.StackImages(**imParameters)
-        
+        palette = 'coolwarm'
         imArray.showColorImage(threshold, palette=palette, plot_contours=True)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)

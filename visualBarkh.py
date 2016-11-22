@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 from gpuSwitchtime import get_gpuSwitchTime
-from colorsys import hsv_to_rgb
 from PIL import Image
 import tifffile
 import getLogDistributions as gLD
@@ -24,6 +23,8 @@ import tables
 import polar
 import collect_images
 import kernel
+from mokas_colors import get_cmap, getKoreanColors, getPalette
+
 
 # p2p = 3 # Pixel to pixel (linear) distance for cluster detection
 # NN = 2*p2p + 1
@@ -677,18 +678,6 @@ sel
         switchTimesWithFillValue = maskedSwitchTimes.filled(fillValue) # Isn't it fantastic?
         return switchTimesWithFillValue
 
-    def _getKoreanColors(self, switchTime, n_images=None):
-        """
-        Make a palette in the korean style
-        """
-        if not n_images:
-            n_images = self.n_images
-        n = float(switchTime)/float(n_images)*3.
-        R = (n<=1.)+ (2.-n)*(n>1.)*(n<=2.)
-        G = n*(n<=1.)+ (n>1.)*(n<=2.)+(3.-n)*(n>2.)
-        B = (n-1.)*(n>=1.)*(n<2.)+(n>=2.)
-        R, G, B = [int(i*255) for i in [R,G,B]]
-        return R,G,B
 
     def _isColorImageDone(self,ask=True):
         print("You must first run the getSwitchTimesAndSteps script: I'll do that for you")
@@ -699,54 +688,6 @@ sel
                 return
         self.getSwitchTimesAndSteps()
         return
-
-    def _getPalette(self, palette='ral', noSwitchColor='white'):
-        """
-        get the color palette
-        """
-        if type(palette) is not type('str'):
-            return palette
-
-        white = np.array([255,255,255])
-        if self._koreanPalette is None:
-            # Prepare the Korean Palette
-            self._koreanPalette = np.array([self._getKoreanColors(i, self._nImagesWithSwitch) 
-                                            for i in range(self._nImagesWithSwitch)])
-
-        if palette == 'korean':
-            pColor = self._koreanPalette
-        elif palette == 'randomKorean':
-            pColor = np.random.permutation(self._koreanPalette)
-        elif palette == 'random':
-            pColor = np.random.randint(0, 256, self._koreanPalette.shape)
-        elif palette == 'pastel':
-            pColor = (np.random.randint(0, 256, self._koreanPalette.shape) + white) / 2
-        elif palette == 'randomHue':
-            # Use equally spaced colors in the HUE weel, and
-            # then randomize
-            pColor = [hsv_to_rgb(j/float(self._nImagesWithSwitch),1, 
-                                 np.random.uniform(0.75,1)) 
-                                 for j in range(self._nImagesWithSwitch)]
-            pColor = np.random.permutation(pColor)
-        elif palette == 'hue':
-            # Use equally spaced colors in the HUE weel
-            pColor = [hsv_to_rgb(j/float(self._nImagesWithSwitch),1, 1) 
-                                 for j in range(self._nImagesWithSwitch)]
-        elif palette == 'randomRal':
-            pColor = np.random.permutation(ral_colors)[:self._nImagesWithSwitch]
-        elif palette == 'ral':
-            pColor = ral_colors[:self._nImagesWithSwitch]
-
-        if noSwitchColor == 'black':
-            noSwitchColorValue = 3*[0]
-        elif noSwitchColor == 'white':
-            noSwitchColorValue = 3*[255]
-        elif noSwitchColor == 'gray':
-            noSwitchColorValue = 3*[125]
-        else:
-            print("No color, assuming black")
-            noSwitchColorValue = 3*[0]
-        return np.concatenate(([noSwitchColorValue], pColor))/255.        
 
     def _getColorImage(self, palette='korean', noSwitchColor='black'):
         """
@@ -776,7 +717,7 @@ sel
         print("Gray changes are between %s and %s" % (min(self._switchSteps), max(self._switchSteps)))
 
         # Calculate the colours, considering the range of the switch values obtained
-        self._pColors = self._getPalette(palette, noSwitchColor)
+        self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
         #self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
         self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
         central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
@@ -1594,7 +1535,7 @@ sel
         self._nodeHdf5(f5, imagesGroup, "lastmage", imColor, "IMAGE")
         palettes = ['korean', 'randomKorean', 'ral', 'random', 'randomHue']
         for palette in palettes:
-            colors = self._getPalette(palette, 'black')
+            colors = getPalette(self._nImagesWithSwitch, palette, 'black')
             imColor = colors[self._switchTimes2D]
             self._nodeHdf5(f5, imagesGroup, palette, imColor, "IMAGE")
         # Save the histogram
@@ -1793,7 +1734,7 @@ sel
             self.centers_of_mass[switch] = (y,x)
             n_images = self.sw[-1]-self.sw[self.n_first]
             n = float(switch-self.sw[self.n_first])
-            clr = self._getKoreanColors(n, n_images)
+            clr = getKoreanColors(n, n_images)
             #print(n, clr)
             clr = tuple([c/255. for c in clr])
             if plot_centers_of_mass and reference is None:

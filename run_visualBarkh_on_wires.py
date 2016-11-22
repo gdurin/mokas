@@ -5,7 +5,7 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 from visualBarkh import StackImages
-from run_creep import get_colors
+from mokas_colors import get_colors
 
 
 p2p = 3 # Pixel to pixel (linear) distance for cluster detection
