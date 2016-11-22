@@ -25,9 +25,9 @@ import polar
 import collect_images
 import kernel
 
-p2p = 3 # Pixel to pixel (linear) distance for cluster detection
-NN = 2*p2p + 1
-NNstructure = np.asanyarray([[0, 1, 0], [1,1,1], [0,1,0]])
+# p2p = 3 # Pixel to pixel (linear) distance for cluster detection
+# NN = 2*p2p + 1
+# NNstructure = np.asanyarray([[0, 1, 0], [1,1,1], [0,1,0]])
 
 def denoise(im):
     U,T = rof.denoise(im,im)
@@ -177,7 +177,7 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 5, kernel_internal_points = 0,
-                 boundary=None, imCrop=False, 
+                 kernel_switch_position = 'center', boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None):
         """
         Initialized the class
@@ -202,10 +202,10 @@ class StackImages:
         self.figRawAndCalc = None
         self.imagesRange = (firstIm, lastIm)
         self.imageDir = None
-        self.structure = NNstructure
         self.initial_domain_region = initial_domain_region
         self.is_find_contours = False
         self.isTwoImages = False
+        self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         if boundary == 'periodic':
             self.boundary = 'periodic'
         else:
@@ -244,6 +244,7 @@ class StackImages:
         self.kernel = kernel.get_kernel(kernel_half_width_of_ones, kernel_internal_points, start = kernel_start)
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
         self.kernel_internal_points = kernel_internal_points
+        self.kernel_switch_position = kernel_switch_position
 
     def __get__(self):
         return self.Array
@@ -415,7 +416,7 @@ class StackImages:
         ax.plot(x, kernel, '-o')
 
         # The code below assumed to have two kernels;
-        # Now it is no longer used. To be erase in the near future
+        # Now it is no longer used. To be erased in the near future
         # =================================================================
         # Add the two kernels function
         # kernels = [self.kernel, self.kernel0]
@@ -610,10 +611,17 @@ class StackImages:
                         switchTimes = np.vstack((switchTimes, switch))
                         switchSteps = np.vstack((switchSteps, step))
             self._switchSteps = switchSteps.flatten()
-            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten() 
-            self._switchTimes += self.kernel_internal_points/2 + 1 
+            # Add the value of the first image
+            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten() + 1
+            # Add the position of the set by the kernel_internal_points:
+            if self.kernel_internal_points != 0:
+                if self.kernel_switch_position == "center":
+                    self._switchTimes += np.int(self.kernel_internal_points/2)
+                elif self.kernel_switch_position == "end":
+                    self._switchTimes += np.int(self.kernel_internal_points)
             print('Analysing done in %f seconds' % (time.time()-startTime))
         else:
+            # DO NOT USE!
             switchTimes = []
             switchSteps = []
             for x in range(self.dimX):
@@ -869,7 +877,7 @@ sel
         ax.axis(extent)
         if title is None:
             first, last = self.imagesRange
-            title = "DW motion from image %i to image %i" % (self.imageNumbers[first], self.imageNumbers[last])
+            title = "DW motion from image %i to image %i" % (first, last)
         ax.title.set_text(title)
         plt.show()
         return fig
@@ -932,21 +940,21 @@ sel
             fig.save(filename)
 
 
-    def imDiffCalculated(self,imageNum,haveColors=True):
+    def imDiffCalculated(self, imageNum, haveColors=True):
         """
         Get the difference in BW between two images imageNum and imageNum+1
         as calculated by the self._colorImage
         """
         if not self._isColorImage:
             self._isColorImageDone(ask=False)
-        imDC = (self._switchTimes2D==imageNum)*1
+        imDC = (self._switchTimes2D == imageNum) * 1
         if haveColors:
-            imDC = scipy.array(imDC,dtype='int16')
-            l, n = self.label(imDC,NNstructure)
-            im_io.imshow(l,plt.cm.prism)
+            imDC = scipy.array(imDC, dtype='int16')
+            l, n = self.label(imDC, self.NNstructure)
+            im_io.imshow(l, plt.cm.prism)
         else:
             # Normalize to a BW image
-            self.imDiffCalcArray = imDC*255
+            self.imDiffCalcArray = imDC * 255
             scipy.misc.toimage(self.imDiffCalcArray).show()
         return None
 
@@ -1003,14 +1011,14 @@ sel
             print("Saving image %i" % image)
         return
 
-    def label(self, image, structure=NNstructure):
+    def label(self, image):
         """
         calculate the clusters using
         the mahotas code
         http://mahotas.readthedocs.org/en/latest/labeled.html
         """
         edges = [('0001', '0010'), ('0100', '1000'), ('0111', '1000'), ('0111','1001')]
-        im, n_cluster = mahotas.label(image, structure)
+        im, n_cluster = mahotas.label(image, self.NNstructure)
         if self.boundary == 'periodic':
             dic_labels = {}
             # First find the image of no_touching clusters
@@ -1029,7 +1037,7 @@ sel
                             # Check the n. of clusters
                             imUp, imDown = im_touching==up_label, im_touching==down_label
                             imPlus = imUp + imDown
-                            im0, n0 = mahotas.label(imPlus, structure)
+                            im0, n0 = mahotas.label(imPlus, self.NNstructure)
                             # Join the two images
                             if e0 == '0001':
                                 imDouble = np.vstack((imPlus, imPlus))
@@ -1189,7 +1197,7 @@ sel
         else:
             ax2 = axs[1,2] 
             #plt.subplot(2,3,6)
-        im, n_clusters = self.label(switchTimes_images, self.structure)
+        im, n_clusters = self.label(switchTimes_images, self.NNstructure)
         self.outIm = im
         myPalette_background = [(0.5,0.5,0.5)]
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
@@ -1276,7 +1284,7 @@ sel
         for imageNumber0 in iterator:
             im0 = (self._switchTimes2D==imageNumber0)*1
             im0 = scipy.array(im0, dtype="int16")
-            array_labels, n_clusters = self.label(im0, self.structure)
+            array_labels, n_clusters = self.label(im0, self.NNstructure)
             if n_clusters >= clusterThreshold:
                 imageNumber = imageNumber0 + self.min_switch
                 n_of_images_with_ghosts.append(imageNumber)
@@ -1293,7 +1301,7 @@ sel
             image1, n1 = images_with_ghosts[ghi]
             image2, n2 = images_with_ghosts[ghi+1]
             new_array = scipy.array(image1+image2, dtype="int16")
-            image3, n3 = self.label(new_array, self.structure)
+            image3, n3 = self.label(new_array, self.NNstructure)
             if showImages:
                 for i, results in enumerate(zip([image1, image2, image3],[n1, n2, n3])):
                     im, clusters = results
@@ -1443,7 +1451,7 @@ sel
             # Now move to cluster distributions
             #
             # Detect local clusters 
-            array_labels, n_labels = self.label(im0, self.structure)
+            array_labels, n_labels = self.label(im0, self.NNstructure)
             # Make a list the sizes of the clustersgetAxyLabels
             list_clusters_sizes = nd.sum(im0, array_labels, 
                                          range(1, n_labels+1))
@@ -1596,7 +1604,7 @@ sel
         f5.close()
         return
 
-    def _max_switch_not_touching_edges(self,sw,NNstructure):
+    def _max_switch_not_touching_edges(self, sw):
         """
         Calculated the max switch with a fully internal domain 
         It is used to calculate the initial nucleated domain 
@@ -1604,7 +1612,7 @@ sel
         q = np.copy(self._switchTimes2D)
         switch0 = sw[0]
         for switch in sw:
-            im, n_cluster = mahotas.label(q==switch,NNstructure)
+            im, n_cluster = mahotas.label(q==switch, self.NNstructure)
             if '0000' not in [gal.getAxyLabels(im==n) for n in range(1,n_cluster+1)]:
                 return switch0
             else:
@@ -1618,9 +1626,9 @@ sel
         else:
             self.n_first = 0
         self.firstSw = self.sw[self.n_first]
-        self.max_switch = self._max_switch_not_touching_edges(self.sw[self.n_first:],self.NNstructure)
+        self.max_switch = self._max_switch_not_touching_edges(self.sw[self.n_first:])
 
-    def find_central_domain(self,initial_domain_region=None):
+    def find_central_domain(self, initial_domain_region=None):
         # check if initial_domain_region is set
         if initial_domain_region == None:
             initial_domain_region = self.initial_domain_region
@@ -1633,11 +1641,11 @@ sel
         if initial_domain_region == None:
             q = np.copy(self._switchTimes2D)
             # Set the switched pixels as the backgroud
-            q[(self._switchTimes2D >= self.firstSw) & (self._switchTimes2D < self.max_switch)] = 0
+            q[(self._switchTimes2D >= self.firstSw) & (self._switchTimes2D <= self.max_switch)] = 0
             q[self._switchTimes2D == -1] = 1
             if self.max_switch != self.sw[-1]:
                 q[self._switchTimes2D >= self.max_switch] = 1
-            im, n_cluster = mahotas.label(q, NNstructure)
+            im, n_cluster = mahotas.label(q, self.NNstructure)
             # Find the nucleated domain
             # It assumes it does not touches the edges
             im = mahotas.labeled.remove_bordering(im)
@@ -1648,23 +1656,43 @@ sel
             index_central_domain = size_clusters.argmax()
             size_central_domain = size_clusters[index_central_domain]
             central_domain = im == index_central_domain + 1
+            # Check if the central domain is compact
+            # and exclude the holes from the switched pixels
+            central_domain = self._exclude_holes_from_central_domain(central_domain)
             yc,xc = nd.measurements.center_of_mass(central_domain)
         else:
+            # The code below is clearly buggy
             xmin, ymin, xmax, ymax = initial_domain_region
             for switch in self.sw[self.n_first:]:
                 q = self._switchTimes2D == switch
                 im, n_cluster = mahotas.label(q, self.NNstructure)
-                for i in range(1,n_cluster+1):
+                for i in range(1, n_cluster+1):
                     central_domain = im == i
                     yc,xc = nd.measurements.center_of_mass(central_domain)
                     if xc > xmin and xc < xmax and yc > ymin and yc < ymax:
                         print("Central domain found at switch %i" % switch)
                         size_central_domain = np.sum(im)
+                        central_domain = self._exclude_holes_from_central_domain(central_domain)
                         return (yc,xc), central_domain, size_central_domain
             print("Sorry, I could not find any central domain within (%i,%i,%i,%i)" % initial_domain_region)
             central_domain = None
             xc, yc = None, None
         return (yc,xc), central_domain, size_central_domain
+
+    def _exclude_holes_from_central_domain(self, central_domain):
+        # Check if the central domain is compact
+        # and exclude the holes from the switched pixels
+        not_central_domain = ~central_domain
+        not_central_domain, n_cluster = mahotas.label(not_central_domain, self.NNstructure)
+        if n_cluster:
+            not_central_domain = mahotas.labeled.remove_bordering(not_central_domain)
+            # Add the clusters to the central domain
+            clusters = not_central_domain > 0
+            central_domain = central_domain + clusters
+        # Exclude them all from the swicthed points
+        self._switchTimes2D[clusters] == -1
+        return central_domain
+
 
     def find_contours(self,lines_color=None,invert_y_axis=True,step_image=1,
                         initial_domain_region=None,remove_bordering=False,
@@ -1687,7 +1715,6 @@ sel
         reference : str
             None or 'center_of_mass'
         """
-        self.is_find_contours = True
         if fig is None:
             fig = plt.figure(figsize=self._figColorImage.get_size_inches())
             ax = fig.gca()
@@ -1695,7 +1722,6 @@ sel
             plt.figure(fig.number)
             if ax is None:
                 ax = fig.gca()
-        self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         self.contours = {}
         self.bubbles = {}
         self.centers_of_mass = {}
@@ -1723,11 +1749,11 @@ sel
 
         sw = np.unique(self._switchTimes2D)
         n_max_switch = np.argwhere(self.sw==self.max_switch)[0][0]
-
-        for k,switch in enumerate(self.sw[self.n_first:n_max_switch+1]):
+        self.central_domain_initial = central_domain
+        for k, switch in enumerate(self.sw[self.n_first:n_max_switch+1]):
             q = self._switchTimes2D == switch
             q = q + central_domain
-            labeled, n_cluster = mahotas.label(q, NNstructure)
+            labeled, n_cluster = mahotas.label(q, self.NNstructure)
             im, n_cluster = mahotas.labeled.filter_labeled(labeled, 
                             remove_bordering=remove_bordering, min_size=size_central_domain)
             if n_cluster > 1:
@@ -1743,8 +1769,9 @@ sel
                 size_central_domain = np.sum(central_domain)
             # Get the properties
             try:
-                properties = measure.regionprops(central_domain)[0]
+                properties = measure.regionprops(central_domain*1)[0]
             except:
+                print(properties)
                 print("There is a problem with the central domain: properties not avaliable")
                 self.central_domain = central_domain
                 self.im = im
@@ -1773,7 +1800,7 @@ sel
                 ax.plot(x,y,'o',c=clr)
             #plt.plot(x,y,'o')
             try:
-                cnts = measure.find_contours(central_domain,.5)[0]
+                cnts = measure.find_contours(central_domain*1,.5)[0]
             except:
                 self.im = im
                 print("There is a problem with the contour of image n. {}".format(switch))
@@ -1813,6 +1840,7 @@ sel
             ax.set_title(title)
         ax.axis('equal')
         plt.show()
+        self.is_find_contours = True
         return
         
     def rescale_contours(self,invert_y_axis=True,fig=None,ax=None):
@@ -1843,4 +1871,36 @@ sel
             ax.legend(bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0.)
         return
 
+    def waiting_times_map(self, is_plot=True, log_norm=True):
+        """
+        calculate and plot the waiting time matrix
+        """
+        from matplotlib.colors import LogNorm
+        if not self.is_find_contours:
+            print("You have to run find_contours first")
+        x_points = np.array([])
+        y_points = np.array([])
+        # Collect the x and y of the contours
+        for k in self.contours:
+            cnt = self.contours[k]
+            x, y = cnt[:,0], cnt[:,1]
+            x_points = np.append(x, x_points)
+            y_points = np.append(y, y_points)
+        n_images, rows, cols = self.shape
+        bins = (np.arange(0,cols,.5), np.arange(0,rows,.5))
+        waiting_times_hist, xedges, yedges = np.histogram2d(x_points, y_points, bins=bins)
+        wt_masked = np.ma.masked_where(waiting_times_hist==0, waiting_times_hist)
+        if is_plot:
+            if log_norm:
+                norm = LogNorm()
+            else:
+                norm = 'None'
+            fig1 = plt.figure()
+            plt.imshow(waiting_times_hist,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                norm=norm, interpolation='nearest')
+            fig2 = plt.figure()
+            plt.imshow(wt_masked,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+                norm=norm, interpolation='nearest')
+        self.waiting_times_hist = waiting_times_hist
+        return
 

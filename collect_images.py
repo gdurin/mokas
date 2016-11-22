@@ -155,7 +155,7 @@ class Images:
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
             assert len(self.images) == len(self.imageNumbers)
-            print("Checking length... OK")
+            print("Checking length... OK; there are {} images".format(len(self.imageNumbers)))
         except AssertionError as e:
             print(e)
             print("Checking lenght... Failed")

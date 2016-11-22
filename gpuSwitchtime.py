@@ -46,7 +46,7 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
     grid_X, grid_Y = (dim_x - 1) / block_X + 1, (dim_y - 1) / block_Y + 1
     
     
-    aMod = np.zeros(((dim_z+len_kernel-1), dim_y, dim_x), dtype=np.int32)
+    aMod = np.zeros(((dim_z + len_kernel -  1), dim_y, dim_x), dtype=np.int32)
     switch = np.zeros((dim_y,dim_x), dtype=np.int32)
     levels = np.zeros((dim_y,dim_x), dtype=np.int32)
     
