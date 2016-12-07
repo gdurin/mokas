@@ -9,13 +9,12 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
+from colorsys import hsv_to_rgb
 from gpuSwitchtime import get_gpuSwitchTime
 from PIL import Image
 import tifffile
 import getLogDistributions as gLD
-#reload(gLD)
 import getAxyLabels as gal
-#reload(gal)
 import rof
 import mahotas
 #import h5py
@@ -89,17 +88,6 @@ except:
 # Adjust the interpolation scheme to show the images
 mpl.rcParams['image.interpolation'] = 'nearest'
 
-# Load ral colors
-# See http://www.ralcolor.com/
-ral_colors = []
-f = open("ral_color_selected2.txt")
-rals = f.readlines()
-f.close()
-ral_colors = [r.split()[-3:] for r in rals]
-ral_colors = [[int(rgb) for rgb in r.split()[-3:]] for r in rals]
-ral_colors = np.array(ral_colors)
-ral_colors = np.concatenate((ral_colors, ral_colors / 2))
-ral_colors = np.concatenate((ral_colors, ral_colors))
 
 
 def natural_key(string_):
@@ -179,7 +167,10 @@ class StackImages:
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 5, kernel_internal_points = 0,
                  kernel_switch_position = 'center', boundary=None, imCrop=False, 
-                 initial_domain_region=None, subtract=None):
+                 initial_domain_region=None, subtract=None,
+                 exclude_switches_from_central_domain=True,
+                 exclude_switches_out_of_final_domain=True,
+                 use_max_criterium=True):
         """
         Initialized the class
         """
@@ -206,13 +197,19 @@ class StackImages:
         self.initial_domain_region = initial_domain_region
         self.is_find_contours = False
         self.isTwoImages = False
-        self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
+        self.is_minmax_switches = False
+        self.use_max_criterium = use_max_criterium
+        self.pattern = pattern
+        #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
+        self.NNstructure = np.ones((3,3))
         if boundary == 'periodic':
             self.boundary = 'periodic'
         else:
             self.boundary = None
         if not lastIm:
             lastIm = -1
+        self.exclude_switches_from_central_domain = exclude_switches_from_central_domain
+        self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
 
         # Check paths
         if not os.path.isdir(self._mainDir):
@@ -247,7 +244,11 @@ class StackImages:
         self.kernel_internal_points = kernel_internal_points
         self.kernel_switch_position = kernel_switch_position
 
+
     def __get__(self):
+        """
+        redifine the get
+        """
         return self.Array
 
     def __getitem__(self,n):
@@ -400,7 +401,8 @@ class StackImages:
         ax = plt.gca()
         # Plot the temporal sequence first
         pxt = self.pixelTimeSequence(pixel)
-        ax.plot(self.imageNumbers,pxt,'-o')
+        label_pixel = "(%i, %i)" % (pixel[0], pixel[1])
+        ax.plot(self.imageNumbers,pxt,'-o', label=label_pixel)
         # Add the calculus of GPU
         row, col = self._pixel2rowcol(pixel)
         switch = self._switchTimes2D[row, col]
@@ -413,7 +415,6 @@ class StackImages:
         kernel = self.kernel * step / 2 + pxt_average
         # This is valid for the step kernel ONLY
         x =  np.arange(switch - (l0+l1/2), switch + (l0+l1/2) + l1%2)
-        
         ax.plot(x, kernel, '-o')
 
         # The code below assumed to have two kernels;
@@ -442,6 +443,7 @@ class StackImages:
         #             *(k==1) + n_points_right * [value_right]
         #         print(len(x), len(y))
         # =================================================================
+        plt.legend()
         plt.show()
 
     def getSwitchTime(self, pixel=(0,0), useKernel='step', method='convolve1d'):
@@ -620,6 +622,7 @@ class StackImages:
                     self._switchTimes += np.int(self.kernel_internal_points/2)
                 elif self.kernel_switch_position == "end":
                     self._switchTimes += np.int(self.kernel_internal_points)
+            #self._switchTimes[self._swithTimes == self.lastIm] = 
             print('Analysing done in %f seconds' % (time.time()-startTime))
         else:
             # DO NOT USE!
@@ -651,7 +654,6 @@ class StackImages:
     def _getSwitchTimesOverThreshold(self, isFirstSwitchZero=False, fillValue=-1):
         """
         _getSwitchTimesOverThreshold()
-sel
         Returns the array of the switch times
         considering a self._threshold in the gray level change at the switch
 
@@ -689,7 +691,7 @@ sel
         self.getSwitchTimesAndSteps()
         return
 
-    def _getColorImage(self, palette='korean', noSwitchColor='black'):
+    def _getColorImage(self, palette, noSwitchColor='black'):
         """
         Calculate the color Image using the output of getSwitchTimesAndSteps
 
@@ -718,25 +720,39 @@ sel
 
         # Calculate the colours, considering the range of the switch values obtained
         self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
-        #self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
         self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
         central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
         # Calculate the switch time Array (2D) considering the threshold and the start from zero
         fillValue = -1
         self._switchTimes2D = self._getSwitchTimesOverThreshold(False, fillValue).reshape(self.dimX, self.dimY)
         self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
+        self._switchTimes2D_original = np.copy(self._switchTimes2D)
+        # Now check if getting rid of the wrong switches 
+        if self.use_max_criterium:
+            # This get rid of the wrong switches
+            # Using the cluster max size for the switches
+            # It redefines self._switchTimes2D
+            self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)
+            self._switchTimes2D[self.final_domain == False] = -1
+            # Calculate the initial domain
+            im, n_cluster = mahotas.label(~self.final_domain, self.NNstructure)
+            im = mahotas.labeled.remove_bordering(im)
+            sizes = mahotas.labeled.labeled_size(im)[1:]
+            index_max_size = sizes.argmax()
+            self.initial_domain = im == index_max_size + 1
+        #self.minmax_switches()
+
         if fillValue in self._switchTimes2D:
             self._switchTimesUnique = np.unique(self._switchTimes2D)[1:] + self.min_switch
         else:
             self._switchTimesUnique = np.unique(self._switchTimes2D) + self.min_switch
+
         return
 
 
-    def showColorImage(self, threshold=0, palette='random', plotHist=True, plot_contours=False,
-                       noSwitchColor='black', ask=False,fig=None,ax=None,title=None,figsize=(8,7)):
+    def showColorImage(self, threshold, data=None, palette='random', plotHist=True, plot_contours=False,
+                       noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
         """
-        showColorImage([threshold=0, palette='random', noSwitchColor='black', ask=False])
-
         Show the calculated color Image of the avalanches.
         Run getSwitchTimesAndSteps if not done before.
 
@@ -759,7 +775,8 @@ sel
         # Calculate the Color Image
         self._getColorImage(palette, noSwitchColor)
         # Prepare to plot
-        data = self._switchTimes2D
+        if data == None:
+            data = self._switchTimes2D
         if fig is None:
             self._figColorImage = self._plotColorImage(data, 
                 self._colorMap, self._figColorImage,title=title,figsize=figsize)
@@ -769,7 +786,7 @@ sel
         if plot_contours:
             if ax is None:
                 ax = fig.gca()
-            self.find_contours(lines_color='k',remove_bordering=True,invert_y_axis=False,fig=fig,ax=ax)
+            self.find_contours(lines_color='k', remove_bordering=True, invert_y_axis=False, fig=fig, ax=ax)
         if plotHist:
             # Plot the histogram
             self.plotHistogram(self._switchTimesOverThreshold, ylabel="Avalanche size (pixels)")
@@ -792,7 +809,14 @@ sel
         else:
             return None
 
-    def _plotColorImage(self, data, colorMap,fig=None, ax=None, title=None, figsize=(8,7)):
+    def _call_pixel_time_sequence(self, event):
+        if event.dblclick:
+            pixel = int(round(event.xdata)), int(round(event.ydata))
+            print("Pixel: (%i, %i)" % (pixel[0],pixel[1]))
+            self.showPixelTimeSequence(pixel, newPlot=True)
+            #plt.show()
+
+    def _plotColorImage(self, data, colorMap, fig=None, ax=None, title=None, figsize=(8,7)):
         """
         if the caption is not shown, just enlarge the image
         as it depends on the length of the string retured by
@@ -809,7 +833,6 @@ sel
         ax.format_coord = lambda p0,p1: self._call_pixel_switch(p0, p1)
         # Sets the limits of the image
         extent = 0, self.dimY, self.dimX, 0
-
         bounds = np.unique(data)
         bounds = np.append(bounds, bounds[-1]+1)-0.5
         self.norm = mpl.colors.BoundaryNorm(bounds, len(bounds)-1)
@@ -818,9 +841,10 @@ sel
         ax.axis(extent)
         if title is None:
             first, last = self.imagesRange
-            title = "DW motion from image %i to image %i" % (first, last)
+            #title = "DW motion from image %i to image %i" % (first, last)
+            title = self.pattern
         ax.title.set_text(title)
-        plt.show()
+        cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
         return fig
 
     def plotHistogram(self,data,fig=None,ax=None,title=None,ylabel=None):
@@ -850,8 +874,8 @@ sel
             thispatch.set_facecolor(c)
         return None
 
-    def saveColorImage(self,fileName,threshold=None, 
-                       palette='random',noSwitchColor='black'):
+
+    def saveColorImage(self,fileName,threshold=None, palette='random',noSwitchColor='black'):
         """
         saveColorImage(fileName, threshold=None, 
                        palette='korean',noSwitchColor='black')
@@ -879,7 +903,6 @@ sel
         else:
             filename = os.path.join(self._mainDir, filename)
             fig.save(filename)
-
 
     def imDiffCalculated(self, imageNum, haveColors=True):
         """
@@ -994,9 +1017,8 @@ sel
             im, n_cluster = mahotas.labeled.relabel(im)
         return im, n_cluster
         
-
-    def showRawAndCalcImages(self, nImage=None, preAvalanches=True, 
-                isTwoImages=False, subtract_first_image=False,autoscale=False):
+    def showRawAndCalcImages(self, nImage=None, preAvalanches=True, \
+        isTwoImages=False, subtract_first_image=False,autoscale=False):
         """
         show the Raw and the Calculated image n
         Automatically increases the values of the image
@@ -1138,7 +1160,7 @@ sel
         else:
             ax2 = axs[1,2] 
             #plt.subplot(2,3,6)
-        im, n_clusters = self.label(switchTimes_images, self.NNstructure)
+        im, n_clusters = self.label(switchTimes_images)
         self.outIm = im
         myPalette_background = [(0.5,0.5,0.5)]
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
@@ -1170,12 +1192,11 @@ sel
               (self.nImage, size, float(size)/(self.dimX*self.dimY)*100)
         print(msg)
         if not self.isConnectionRawImage:
-            plt.connect('key_press_event', self._show_next_raw_image)
+            self.figRawAndCalc.canvas.mpl_connect('key_press_event', self._show_next_raw_image)
             self.isConnectionRawImage = True
         return
 
-    def ghostbusters(self, clusterThreshold = 15, 
-                     showImages=False, imageNumber=None):
+    def ghostbusters(self, clusterThreshold = 15, showImages=False, imageNumber=None):
         """
         Find the presence of 'ghost' images,
         given by not fully-resolved avalanches.
@@ -1290,7 +1311,6 @@ sel
             else:
                 return
 
-
     def _getImageDirection(self, threshold=None):
         """
         _getImageDirection(threshold=None)
@@ -1332,9 +1352,7 @@ sel
         max_in_mask = scipy.array(pixelsUnderMasks).argmax()
         return imageDirections[max_in_mask]
 
-
-    def getDistributions(self, log_step=0.2, edgeThickness=1, 
-                         fraction=0.01):
+    def getDistributions(self, log_step=0.2, edgeThickness=1, fraction=0.01):
         """
         Calculates the distribution of avalanches and clusters
 
@@ -1488,8 +1506,7 @@ sel
         sizes = re.findall("\d+x\d+", lns[camera_line+1])
         size = sizes[camera_n]
         return size
-
-                   
+                  
     def saveHdf5(self):
         """
         Prepare a hdf5 file to
@@ -1549,17 +1566,23 @@ sel
         """
         Calculated the max switch with a fully internal domain 
         It is used to calculate the initial nucleated domain 
+        This is too slow
         """
         q = np.copy(self._switchTimes2D)
-        switch0 = sw[0]
-        for switch in sw:
-            im, n_cluster = mahotas.label(q==switch, self.NNstructure)
-            if '0000' not in [gal.getAxyLabels(im==n) for n in range(1,n_cluster+1)]:
-                return switch0
-            else:
-                switch0 = switch
-        return sw[-1]
- 
+        # The code below is too slow
+        # switch0 = sw[0]
+        # for switch in sw:
+        #     im, n_cluster = mahotas.label(q==switch, self.NNstructure)
+        #     if '0000' not in [gal.getAxyLabels(im==n) for n in range(1,n_cluster+1)]:
+        #         return switch0
+        #     else:
+        #         switch0 = switch
+        # return sw[-1]
+        # Replace with this
+        im, n_cluster = mahotas.label(q!=-1, self.NNstructure)
+        max_size = mahotas.labeled.labeled_size(im)[1:]
+        index_max_size = max_size.argmax()
+    
     def minmax_switches(self):
         self.sw = np.unique(self._switchTimes2D)
         if self.sw[0] == -1:
@@ -1568,6 +1591,43 @@ sel
             self.n_first = 0
         self.firstSw = self.sw[self.n_first]
         self.max_switch = self._max_switch_not_touching_edges(self.sw[self.n_first:])
+        self.is_minmax_switches = True
+
+
+    def _find_final_domain(self, data, fillValue=-1):
+        """
+        find the final domain
+        if use_max_criterium:
+            get all the pixel switches and get the max cluster only
+        """
+        if self.use_max_criterium:
+            self.sw = np.unique(data)
+            is_touching = True
+            k = -1
+            while (is_touching == True):
+                im, n_cluster = mahotas.label(data!=fillValue, self.NNstructure)
+                sizes = mahotas.labeled.labeled_size(im)[1:]
+                index_max_size = sizes.argmax()
+                final_domain = im == index_max_size + 1
+                # Check if the final domain touches the edges
+                im, n_cluster = mahotas.labeled.filter_labeled(final_domain, remove_bordering=True)
+                if n_cluster == 1:
+                    is_touching = False
+                    self.max_switch = self.sw[k]
+                    if self.sw[0] == -1:
+                        self.n_first = 1
+                    else:
+                        self.n_first = 0
+                    self.firstSw = self.sw[self.n_first]
+                    self.is_minmax_switches = True
+                else:
+                    data[data == self.sw[k]] = fillValue
+                    k -= 1
+
+        else:
+            print("Not implemented yet")
+            return None
+        return final_domain
 
     def find_central_domain(self, initial_domain_region=None):
         # check if initial_domain_region is set
@@ -1580,6 +1640,8 @@ sel
         # If the internal domain touches two edges, the label calculation
         # fails, as the backgroub is split into two clusters
         if initial_domain_region == None:
+            if not self.is_minmax_switches:
+                self.minmax_switches()
             q = np.copy(self._switchTimes2D)
             # Set the switched pixels as the backgroud
             q[(self._switchTimes2D >= self.firstSw) & (self._switchTimes2D <= self.max_switch)] = 0
@@ -1599,7 +1661,8 @@ sel
             central_domain = im == index_central_domain + 1
             # Check if the central domain is compact
             # and exclude the holes from the switched pixels
-            central_domain = self._exclude_holes_from_central_domain(central_domain)
+            if self.exclude_switches_from_central_domain:
+                central_domain = self._exclude_holes_from_central_domain(central_domain)
             yc,xc = nd.measurements.center_of_mass(central_domain)
         else:
             # The code below is clearly buggy
@@ -1630,16 +1693,17 @@ sel
             # Add the clusters to the central domain
             clusters = not_central_domain > 0
             central_domain = central_domain + clusters
-        # Exclude them all from the swicthed points
-        self._switchTimes2D[clusters] == -1
+        # Exclude them all from the switched points
+        self._switchTimes2D[clusters] = -1
         return central_domain
 
 
-    def find_contours(self,lines_color=None,invert_y_axis=True,step_image=1,
-                        initial_domain_region=None,remove_bordering=False,
-                        plot_centers_of_mass = False,reference=None, 
+    def find_contours(self, lines_color=None, invert_y_axis=True, step_image=1,
+                        consider_events_around_a_central_domain=True, 
+                        initial_domain_region=None, remove_bordering=False,
+                        plot_centers_of_mass = False, reference=None, 
                         rescale_area=False, plot_rays=True,
-                        fig=None,ax=None,title=None):
+                        fig=None, ax=None, title=None):
         """
         Find the contours of the sequence of DW displacements
         This is suitable for DW bubble expansion experiments
@@ -1667,17 +1731,24 @@ sel
         self.bubbles = {}
         self.centers_of_mass = {}
         # find the initial domain
-        self.minmax_switches()
-        (yc,xc), central_domain, size_central_domain = self.find_central_domain(initial_domain_region)
+        if self.use_max_criterium:
+            central_domain = self.initial_domain
+            size_central_domain = np.sum(central_domain)
+            yc,xc = nd.measurements.center_of_mass(central_domain)
+        else:
+            (yc,xc), central_domain, size_central_domain = self.find_central_domain(initial_domain_region)
         cnts0 = measure.find_contours(central_domain,.5)[0]
         self.contours[0] = cnts0
         self.bubbles[0] = central_domain
         self.centers_of_mass[0] = (yc,xc)
+        # Rescale the area if needed
         if rescale_area:
             scaling = size_central_domain**0.5
         else:
             scaling = 1.
+        # Plot the central domain
         X,Y = cnts0[:,1], cnts0[:,0]
+        # Plot the center of mass of the nucleated domain
         if reference == 'center_of_mass':
             X,Y = (X-xc)/scaling, (Y-yc)/scaling
             ax.plot(0,0,'o',color=lines_color)
@@ -1686,18 +1757,18 @@ sel
             ax.plot(xc,yc,'o',color=lines_color)
         # The nucleated domain is always black
         ax.plot(X,Y,'k',antialiased=True,lw=2)
-        # Plot the center of mass of the nucleated domain
-
-        sw = np.unique(self._switchTimes2D)
+        
+        #sw = np.unique(self._switchTimes2D)
         n_max_switch = np.argwhere(self.sw==self.max_switch)[0][0]
-        self.central_domain_initial = central_domain
         for k, switch in enumerate(self.sw[self.n_first:n_max_switch+1]):
+            print(switch)
             q = self._switchTimes2D == switch
             q = q + central_domain
             labeled, n_cluster = mahotas.label(q, self.NNstructure)
             im, n_cluster = mahotas.labeled.filter_labeled(labeled, 
                             remove_bordering=remove_bordering, min_size=size_central_domain)
             if n_cluster > 1:
+                print("switch %i has %i clusters" % (switch, n_cluster))
                 # If there are many clusters, take the larger one
                 # TODO: this is not very general
                 size_clusters = mahotas.labeled.labeled_size(im)[1:]
@@ -1706,7 +1777,7 @@ sel
                 size_central_domain = size_clusters[index_central_domain]
                 central_domain = im == index_central_domain + 1
             else:
-                central_domain = im == 1
+                central_domain = im
                 size_central_domain = np.sum(central_domain)
             # Get the properties
             try:

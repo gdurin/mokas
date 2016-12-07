@@ -10,7 +10,9 @@ import pickle
 import tifffile
 import scipy.ndimage as nd
 import scipy.signal as signal
+import skimage
 import skimage.io as im_io
+from skimage.exposure import equalize_hist
 from PIL import Image
 
 
@@ -142,6 +144,9 @@ class Images:
             height = tif.micromanager_metadata['summary']['Height']
             width = tif.micromanager_metadata['summary']['Width']
             self.images = tif.asarray()
+            max_gray_level = tif.micromanager_metadata['display_settings'][0]['Max']
+            bit_depth = tif.micromanager_metadata['summary']['BitDepth']
+        self.images = self.images.astype(np.int16)
         try:
             assert self.images.shape == (frames, height, width)
             print("TIFF Images loaded...")
@@ -151,7 +156,10 @@ class Images:
             print(frames, height, width)
             print(self.images.shape)
             sys.exit()
-        self.images = self.images.astype(np.int16)
+        # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
+        if max_gray_level != 2**bit_depth - 1:
+            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=bit_depth)
+            print("Done")
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
             assert len(self.images) == len(self.imageNumbers)
@@ -184,6 +192,18 @@ class Images:
 
     def _image_filter(self, image):
         return filters[self.filtering](image, self.sigma)
+
+    def _image_equalize_hist(self, images, full_sequence=True, bit_depth=12):
+        # Do histogram equalization (experimental)
+        if full_sequence:
+            images = equalize_hist(images, nbins=2**bit_depth)*2**bit_depth
+        else:
+            print("Do histogram equalization")
+            for i, im in enumerate(images):
+                eqh = equalize_hist(im, nbins=2**bit_depth)*2**bit_depth
+                images[i] = eqh.astype(np.int16)
+        return images
+
 
     def _image_names(self):
         """
@@ -281,6 +301,7 @@ if __name__ == "__main__":
     #filename = "/home/gf/Meas/Creep/WCoFeB/Const_InPl_Vary_OOP/exp_50mV_6s_19.avi"
     #filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/01_irradiatedFilm_0.16A_10fps/01_irradiatedFilm_0.16A_10fps_MMStack_Pos0.ome.tif"
     filename = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps/01_irradiatedwires_0.19A_10fps_MMStack_Pos0.ome.tif"
+    filename = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_2hours_242images/super_slow_creep_90mV_dc_2hours_242images_MMStack_Pos0.ome.tif"
     root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"

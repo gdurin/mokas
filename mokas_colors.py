@@ -6,6 +6,20 @@ import matplotlib.colors as mpl_colors
 from matplotlib import cm
 from colorsys import hsv_to_rgb
 
+# Load ral colors
+# See http://www.ralcolor.com/
+def get_ral_colors():
+    ral_colors = []
+    with open("ral_color_selected2.txt") as f:
+        rals = f.readlines()
+    ral_colors = [r.split()[-3:] for r in rals]
+    ral_colors = [[int(rgb) for rgb in r.split()[-3:]] for r in rals]
+    ral_colors = np.array(ral_colors)
+    ral_colors = np.concatenate((ral_colors, ral_colors / 2))
+    ral_colors = np.concatenate((ral_colors, ral_colors))
+    return ral_colors
+
+
 def get_cmap(N, cmap='hsv'):
     """Returns a function that maps each index 
     in 0, 1, ... N-1 to a distinct RGB color.
@@ -55,6 +69,7 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
     n: int
         n. of points 
     """
+    print("You are using the {} palette".format(palette))
     if type(palette) is not type('str'):
         return palette
 
@@ -84,11 +99,11 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
     elif palette == 'randomRal':
         pColor = np.random.permutation(ral_colors)[:n]
     elif palette == 'ral':
-        pColor = ral_colors[:n]
+        pColor = get_ral_colors()[:n]
     else:
         try:
             pColor = get_cmap(n, palette)
-            if palette = 'coolwarm':
+            if palette == 'coolwarm':
                 pColor = pColor[::-1]
         except:
             print("Color not available, use pastel instead")

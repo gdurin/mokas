@@ -129,7 +129,7 @@ if __name__ == "__main__":
     elif choice=="Creep":
         k = int(sys.argv[2])
         print k
-        palette = 'pastel'
+        #palette = 'pastel'
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/PtCoAuPt_2c-0d-100pOe-0.975V-1.2s"
         #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/90 degree/PtCoAuPt_3_2c-90d-350pOe-0.780V-3.5s_6"
         if k == 0:
@@ -233,11 +233,11 @@ if __name__ == "__main__":
             imParameters['lastIm'] = 249
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = .5
+            imParameters['sigma'] = 2
             imParameters['subtract'] = 0 # Subtract the first image
             threshold = 8
         elif k == 31:
-            n = "01"
+            n = "05"
             current = "15"
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Moon/run6/%s_nonirradiatedFilm_0.%sA_10fps" % (n,current)
             #imParameters['imCrop'] = (200,1040,500,1390)
@@ -245,7 +245,7 @@ if __name__ == "__main__":
             #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
             crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
             imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
-            #imParameters['imCrop'] = None
+            imParameters['imCrop'] = None
             imParameters['pattern'] = "%s_nonirradiatedFilm_0.%sA_10fps_MMStack_Pos0.ome.tif" % (n,current)
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
             imParameters['lastIm'] = 299
@@ -266,6 +266,54 @@ if __name__ == "__main__":
             #imParameters['filtering'] = None
             imParameters['sigma'] = 1.
             threshold = 20
+        elif k == 6:
+            rootDir = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_2hours_242images"
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
+            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "super_slow_creep_90mV_dc_2hours_242images_MMStack_Pos0.ome.tif" 
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = 241
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 3
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 120
+            #palette ='korean'  
+        elif k == 7:
+            rootDir = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_3hours_362images_MMStack_Pos0.ome.tif"
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
+            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "super_slow_creep_90mV_dc_3hours_362images_MMStack_Pos0.ome.tif" 
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = 361
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 7
+            #palette ='korean'  
+        elif k == 8:
+            # Samridth data
+            rootDir = "/home/gf/Meas/Creep/WCoFeB/Const_InPl_Vary_OOP"
+            crop_upper_left_pixel, crop_lower_right_pixel = (100,100), (600,450)
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            #imParameters['imCrop'] = None
+            imParameters['pattern'] = "exp_70mV_1s_17.avi" 
+            imParameters['firstIm'] = 15 # Use python convention: start from zero!
+            imParameters['lastIm'] = 36
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 20
         else:
             print("Check the path!")
             sys.exit()
@@ -275,7 +323,7 @@ if __name__ == "__main__":
         #imParameters['imCrop'] = (60,460,162,512)
         #imParameters['imCrop'] = (0,510,0,672)
         # Kernel setups
-        imParameters['kernel_half_width_of_ones'] = 5
+        imParameters['kernel_half_width_of_ones'] = 15
         imParameters['kernel_internal_points'] = 0
         imParameters['kernel_switch_position'] = "end"
         ##############################

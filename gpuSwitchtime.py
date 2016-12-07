@@ -90,14 +90,14 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
 		}
 
 		//Mirror of the first elements
-		int idz2=len_kernel/2-1+origine;
+		int idz2=0;//len_kernel/2-1+origine; //no mirroring
 		for(id=0;id<len_kernel/2+origine;id++)
 		{
 
 			int flat_id = idx + dim_x * idy + (dim_x * dim_y) * idz2;		
 			int flat_id3= idx + dim_x * idy + (dim_x * dim_y) * id;	
 			amod[flat_id3]=stack_gpu[flat_id];
-			idz2--;
+			//idz2--; //no mirroring
 		}
 		//Mirror of the last elements
 		int idz3=dim_z-1;
@@ -106,7 +106,7 @@ def get_gpuSwitchTime(stackImages, kernel, device=0):
 			int flat_id4= idx + dim_x * idy + (dim_x * dim_y) * id1;
 			int flat_id5= idx + dim_x * idy + (dim_x * dim_y) * idz3;	
 			amod[flat_id4]=stack_gpu[flat_id5];
-			idz3--;
+			//idz3--; //no mirroring
 
 		}
 
