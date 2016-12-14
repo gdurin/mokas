@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 from colorsys import hsv_to_rgb
-from gpuSwitchtime import get_gpuSwitchTime
+from gpuSwitchtime import get_gpuSwitchTime #gpuSwitchtimeBackup
 from PIL import Image
 import tifffile
 import getLogDistributions as gLD
@@ -21,30 +21,7 @@ import mahotas
 import tables
 import polar
 import collect_images
-import kernel
 from mokas_colors import get_cmap, getKoreanColors, getPalette
-
-
-# p2p = 3 # Pixel to pixel (linear) distance for cluster detection
-# NN = 2*p2p + 1
-# NNstructure = np.asanyarray([[0, 1, 0], [1,1,1], [0,1,0]])
-
-def denoise(im):
-    U,T = rof.denoise(im,im)
-    return np.asarray(U, dtype='int32')
-
-def binary(im):
-    """
-    Tranform an image into a B/W image
-    0 and 255 only
-    Assumes the input is a matrix not a image
-    """
-    max_value = max(im.flatten())
-    imOut = (im > max_value/2) * 255
-    return imOut
-
-filters = {'gauss': nd.gaussian_filter, 'fouriergauss': nd.fourier_gaussian,\
-           'median': nd.median_filter, 'wiener': signal.wiener, 'rof':None, 'binary': None}
 
 
 # Check if pycuda is available
@@ -165,8 +142,10 @@ class StackImages:
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
-                 kernel_half_width_of_ones = 5, kernel_internal_points = 0,
-                 kernel_switch_position = 'center', boundary=None, imCrop=False, 
+                 kernel_half_width_of_ones = 5, 
+                 #kernel_internal_points = 0,
+                 #kernel_switch_position = 'center',
+                 boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
@@ -229,21 +208,32 @@ class StackImages:
         self.n_images, self.dimX, self.dimY = self.shape
         print("%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY))
 
-        # Check for the grey direction
-        # and calculate the kernel
-        grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
-        grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
-        print("grey scale: %i, %i" % (grey_first_image, grey_last_image))
-        if grey_first_image > grey_last_image:
-            kernel_start = 1.
-        else:
-            kernel_start = -1.
+        self.multiplier = self._get_multiplier('bubble')
+        self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
-        self.kernel = kernel.get_kernel(kernel_half_width_of_ones, kernel_internal_points, start = kernel_start)
+        #self.kernel = kernel.get_kernel(kernel_half_width_of_ones, kernel_internal_points, start = kernel_start)
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
-        self.kernel_internal_points = kernel_internal_points
-        self.kernel_switch_position = kernel_switch_position
+        #self.kernel_internal_points = kernel_internal_points
+        #self.kernel_switch_position = kernel_switch_position
 
+    def _get_multiplier(self, method='average_gray'):
+        """
+        multiplier is +1 if -1 -> +1
+        multiplier is -1 if +1 -> -1
+        The method below is only valid for bubbles
+        TODO: make it as a specific method of the subclasses (bubbles, wires, labyrinths)
+        """
+        if method == 'average_gray':
+            grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
+            grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
+            print("grey scale: %i, %i" % (grey_first_image, grey_last_image))
+            if grey_first_image > grey_last_image:
+                return 1.
+            else:
+                return -1.
+        elif method == 'bubble':
+            #im = self.Array[-1]
+            return -1
 
     def __get__(self):
         """
@@ -264,6 +254,8 @@ class StackImages:
         """
         ns = self.imageNumbers
         try:
+            if n < 0:
+                n = self.imageNumbers[n]
             return ns.index(n)
         except:
             print("Image number %i is out of the range (%i,%i)" % (n, ns[0], ns[-1]))
@@ -309,51 +301,6 @@ class StackImages:
             print("Warning: the levels are calculated over all the points of the sequence")
         return self.width
 
-    def _getLevels(self, pxTimeSeq, switch, kernel='step'):
-        """
-        _getLevels(pxTimeSeq, switch, kernel='step')
-
-        Internal function to calculate the gray level before and
-        after the switch of a sequence, using the kernel
-
-        Parameters:
-        ---------------
-        pxTimeSeq : list
-            The sequence of the gray level for a given pixel.
-        switch : number, int
-            the position of the switch as calculated by getSwitchTime
-        kernel : 'step' or 'zero'
-           the kernel of the step function
-
-        Returns:
-        -----------
-        levels : tuple
-           Left and right levels around the switch position
-        """
-        width = self._getWidth()
-
-        # Get points before the switch
-        if width == 'small':
-            halfWidth = len(self.kernel)/2
-            lowPoint = switch - halfWidth - 1*(kernel=='zero')
-            if lowPoint < 0:
-                lowPoint = 0
-            highPoint = switch + halfWidth
-            if highPoint > len(pxTimeSeq):
-                highPoint = len(pxTimeSeq)
-        elif width == 'all':
-            lowPoint, highPoint = 0, len(pxTimeSeq)-1
-        else:
-            print('Method not implement yet')
-            return None
-        try:
-            leftLevel = np.int(np.mean(pxTimeSeq[lowPoint:switch - 1*(kernel=='zero')]) + 0.5)
-            rigthLevel = np.int(np.mean(pxTimeSeq[switch:highPoint]) + 0.5)
-            levels = leftLevel, rigthLevel
-        except:
-            print("Warning, levels could not be calculated, assumed 0,0")
-            levels = (0,0)
-        return levels
 
     def _pixel2rowcol(self, pixel, closest_integer=False):
         """
@@ -409,12 +356,13 @@ class StackImages:
         step = self._switchSteps2D[row, col]
         # Plot the step-like function
         l0 = self.kernel_half_width_of_ones
-        l1 = self.kernel_internal_points
-        pxt_average = np.mean(pxt[switch - (l0+l1)/2:switch + (l0+l1)/2 +1]) # to check
+        pxt_average = np.mean(pxt[switch - l0/2:switch + l0 + 1]) # to check
         print("switch at %i, gray level change = %i" % (switch, step))
-        kernel = self.kernel * step / 2 + pxt_average
+        kernel0 = -self.multiplier * np.ones(self.kernel_half_width_of_ones)
+        kernel0 = np.concatenate((kernel0, -kernel0))
+        kernel = kernel0 * step / 2 + pxt_average
         # This is valid for the step kernel ONLY
-        x =  np.arange(switch - (l0+l1/2), switch + (l0+l1/2) + l1%2)
+        x =  np.arange(switch - l0, switch + l0)
         ax.plot(x, kernel, '-o')
 
         # The code below assumed to have two kernels;
@@ -502,6 +450,7 @@ class StackImages:
         the numbers the images to subtract
         invert : bool
         Invert black and white grey levels
+        TODO: do it properly!!!!
         """
         i, j = imNumbers
         try:
@@ -570,7 +519,7 @@ class StackImages:
             imageFileName = os.path.join(dirSeq, fileName)
             imPIL.save(imageFileName)
 
-    def getSwitchTimesAndSteps(self, isCuda=True, kernel=None):
+    def getSwitchTimesAndSteps(self, isCuda=True, kernel=None, device=0):
         """
         Calculate the switch times and the gray level changes
         for each pixel in the image sequence.
@@ -586,27 +535,32 @@ class StackImages:
         i.e. self.kernel_internal_points is not 0
         we need to add int(self.kernel_internal_points/2) + 1
         """
-        if kernel is None:
-            kernel = self.kernel
+        #if kernel is None:
+        #    kernel = self.kernel
         startTime = time.time()
         # ####################
         if isPyCuda and isCuda:
-            kernel32 = np.asarray(kernel, dtype=np.int32)
+            #kernel32 = np.asarray(kernel, dtype=np.int32)
             stack32 = np.asarray(self.Array, dtype=np.int32)
-            need_mem = 2 * stack32.nbytes
+            need_mem = 2 * stack32.nbytes +  2 * stack32[0].nbytes 
+            driver.Device(device).make_context()
             free_mem_gpu, total_mem_gpu = driver.mem_get_info()
+            print("Total memory to be used: %.2f GB" % (need_mem/1e9))
+            print("Total memory of %s: %.2f GB" % (driver.Device(device).name(), total_mem_gpu/1e9))
             free_mem_gpu = 0.9*free_mem_gpu
             if need_mem < free_mem_gpu:
-                switchTimes, switchSteps = get_gpuSwitchTime(stack32, kernel32, device=1)
+                switchTimes, switchSteps = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, device=device)
             else:
                 nsplit = int(float(need_mem)/free_mem_gpu) + 1
                 print("Splitting images in %d parts..." % nsplit)
                 stack32s = np.array_split(stack32, nsplit, 1)
+                print("Done")
                 switchTimes = np.array([])
                 switchSteps = np.array([])
                 for k, stack32 in enumerate(stack32s):
-                    a = stack32.astype(np.int32)
-                    switch, step = get_gpuSwitchTime(a, kernel32, device=1)
+                    print("Calculation split %i" % k)
+                    #a = stack32.astype(np.int32)
+                    switch, step = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, device=device)
                     if not k:
                         switchTimes = switch
                         switchSteps = step
@@ -615,13 +569,13 @@ class StackImages:
                         switchSteps = np.vstack((switchSteps, step))
             self._switchSteps = switchSteps.flatten()
             # Add the value of the first image
-            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten() + 1
+            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten()
             # Add the position of the set by the kernel_internal_points:
-            if self.kernel_internal_points != 0:
-                if self.kernel_switch_position == "center":
-                    self._switchTimes += np.int(self.kernel_internal_points/2)
-                elif self.kernel_switch_position == "end":
-                    self._switchTimes += np.int(self.kernel_internal_points)
+            #if self.kernel_internal_points != 0:
+            #    if self.kernel_switch_position == "center":
+            #        self._switchTimes += np.int(self.kernel_internal_points/2)
+            #    elif self.kernel_switch_position == "end":
+            #        self._switchTimes += np.int(self.kernel_internal_points)
             #self._switchTimes[self._swithTimes == self.lastIm] = 
             print('Analysing done in %f seconds' % (time.time()-startTime))
         else:
@@ -729,7 +683,7 @@ class StackImages:
         self._switchTimes2D_original = np.copy(self._switchTimes2D)
         # Now check if getting rid of the wrong switches 
         if self.use_max_criterium:
-            # This get rid of the wrong switches
+            # This gets rid of the wrong switches
             # Using the cluster max size for the switches
             # It redefines self._switchTimes2D
             self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)

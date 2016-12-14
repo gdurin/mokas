@@ -109,7 +109,7 @@ if __name__ == "__main__":
         elif k == 30:
             n = "01"
             current = "16"
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/%s_irradiatedFilm_0.%sA_10fps" % (n, current)
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irradiated_Yuting/%s_irradiatedFilm_0.%sA_10fps" % (n, current)
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
             imParameters['imCrop'] = None
@@ -118,7 +118,7 @@ if __name__ == "__main__":
             imParameters['lastIm'] = 249
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
-            imParameters['sigma'] = .5
+            imParameters['sigma'] = 2
             imParameters['subtract'] = 0 # Subtract the first image
             threshold = 8
         elif k == 31:
@@ -133,7 +133,7 @@ if __name__ == "__main__":
             #imParameters['imCrop'] = None
             imParameters['pattern'] = "%s_nonirradiatedFilm_0.%sA_10fps_MMStack_Pos0.ome.tif" % (n,current)
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
-            imParameters['lastIm'] = 299
+            imParameters['lastIm'] = -1
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
             imParameters['sigma'] = 2
@@ -144,6 +144,7 @@ if __name__ == "__main__":
             rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps"
             imParameters['imCrop'] = (0,1392,0,1040)
             imParameters['imCrop'] = (876,1117,250,1040)
+            imParameters['imCrop'] = None
             imParameters['pattern'] = "01_irradiatedwires_0.19A_10fps_MMStack_Pos0.ome.tif"
             imParameters['firstIm'] = 30
             imParameters['lastIm'] = 300
@@ -151,20 +152,55 @@ if __name__ == "__main__":
             #imParameters['filtering'] = None
             imParameters['sigma'] = 1.
             threshold = 20
+        elif k == 61:
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.12A_1fps"
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
+            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "Irr_800He+_0.12A_1fps_MMStack_Pos0.ome.tif" 
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = -1
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2
+            imParameters['subtract'] = 0 # Subtract a reference image
+            threshold = 20
+        elif k == 62:
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps"
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/02_Irr_8e8He+_0.1A_2fps"
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
+            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            imParameters['imCrop'] = None
+            #imParameters['pattern'] = "Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif" 
+            imParameters['pattern'] = "Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = -1
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 20
         else:
             print("Check the path!")
             sys.exit()
         imParameters['resize_factor'] = None
         print(imParameters['pattern'])
         # Kernel setups: do not touch
-        imParameters['kernel_half_width_of_ones'] = 5
-        imParameters['kernel_internal_points'] = 0
-        imParameters['kernel_switch_position'] = "end"
+        imParameters['kernel_half_width_of_ones'] = 15
+        #imParameters['kernel_internal_points'] = 0
+        #imParameters['kernel_switch_position'] = "end"
         ##############################
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         imArray = bk.StackImages(**imParameters)
         
-        imArray.showColorImage(threshold, palette=palette, plot_contours=True)
+        imArray.showColorImage(threshold, palette=palette, plot_contours=False)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
         #'center_of_mass')

@@ -248,7 +248,7 @@ if __name__ == "__main__":
             imParameters['imCrop'] = None
             imParameters['pattern'] = "%s_nonirradiatedFilm_0.%sA_10fps_MMStack_Pos0.ome.tif" % (n,current)
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
-            imParameters['lastIm'] = 299
+            imParameters['lastIm'] = 50
             imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = None
             imParameters['sigma'] = 2
@@ -283,6 +283,23 @@ if __name__ == "__main__":
             imParameters['subtract'] = None # Subtract a reference image
             threshold = 120
             #palette ='korean'  
+        elif k == 61:
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He_0.12A_1fps"
+            #imParameters['imCrop'] = (200,1040,500,1390)
+            #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
+            #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
+            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "Irr_800He_0.12A_1fps_MMStack_Pos0.ome.tif" 
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = 300
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 3
+            imParameters['subtract'] = 0 # Subtract a reference image
+            threshold = 20
+            #palette ='korean'  
         elif k == 7:
             rootDir = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_3hours_362images_MMStack_Pos0.ome.tif"
             #imParameters['imCrop'] = (200,1040,500,1390)
@@ -310,10 +327,24 @@ if __name__ == "__main__":
             imParameters['firstIm'] = 15 # Use python convention: start from zero!
             imParameters['lastIm'] = 36
             imParameters['filtering'] = 'gauss'
-            #imParameters['filtering'] = None
+            imParameters['filtering'] = None
             imParameters['sigma'] = 1
             imParameters['subtract'] = None # Subtract a reference image
             threshold = 20
+        elif k == 9:
+            # Samridth data of labyrinth
+            rootDir = "/home/gf/isiCloud/Data share/Samridh/labyrinth"
+            imParameters['imCrop'] = None
+            imParameters['pattern'] = "oop avg_1.avi" 
+            imParameters['firstIm'] = 0 # Use python convention: start from zero!
+            imParameters['lastIm'] = -1
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1
+            imParameters['subtract'] = None # Subtract a reference image
+            imParameters['use_max_criterium'] = False
+            threshold = 20
+
         else:
             print("Check the path!")
             sys.exit()
@@ -324,8 +355,8 @@ if __name__ == "__main__":
         #imParameters['imCrop'] = (0,510,0,672)
         # Kernel setups
         imParameters['kernel_half_width_of_ones'] = 15
-        imParameters['kernel_internal_points'] = 0
-        imParameters['kernel_switch_position'] = "end"
+        #imParameters['kernel_internal_points'] = 0
+        #imParameters['kernel_switch_position'] = "end"
         ##############################
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         imArray = bk.StackImages(**imParameters)

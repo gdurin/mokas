@@ -42,11 +42,16 @@ class Images:
        first and last image (included) to be loaded
        These numbers refer to the numbers of the filenames,
        or to the number of the frames, starting from 0
+
+    resolution: [8,16] bits
+        Image resolution (8 bits default)
     """
-    def __init__(self, root_dir, pattern, firstIm=0, lastIm=-1,
-                resize_factor=None, crop=None, filtering=None, sigma=None): 
+    def __init__(self, root_dir, pattern, firstIm=0, lastIm=-1, resolution=16,
+                is_hist_equalization=False, resize_factor=None, crop=None, 
+                filtering=None, sigma=None): 
         """
         initialization 
+
         """
         self.root_dir = root_dir
         self.pattern = pattern
@@ -58,6 +63,15 @@ class Images:
         self.filtering = filtering
         self.sigma = sigma
         self.mode = self._set_mode()
+        print(resolution)
+        if resolution == 8:
+            self.resolution = np.int8
+        elif resolution == 16:
+            self.resolution = np.int16
+        elif resolution == 32:
+            self.resolution = np.int32
+        print(self.resolution)
+        self.is_hist_equalization = is_hist_equalization
         #print(self.mode)
         if self.mode == 'pattern':
             self.from_type = self._from_pattern
@@ -94,11 +108,11 @@ class Images:
         """
         function to read and filter images
         """
+        image = im_io.imread(f).astype(self.resolution)
         if self.filtering:
-            image = im_io.imread(f).astype(np.int16)
-            return filters[self.filtering](image, self.sigma)
+            return self._image_filter(image)
         else:
-            return imread(f).astype(np.int16)
+            return image
 
     def _from_pattern(self):
         """
@@ -139,26 +153,32 @@ class Images:
         cap.release()
 
     def _from_tif(self):
-        with tifffile.TiffFile(self.filename) as tif:
+        with tifffile.TiffFile(self.filename, maxpages=100) as tif:
             frames = tif.micromanager_metadata['summary']['Frames']
             height = tif.micromanager_metadata['summary']['Height']
             width = tif.micromanager_metadata['summary']['Width']
             self.images = tif.asarray()
             max_gray_level = tif.micromanager_metadata['display_settings'][0]['Max']
             bit_depth = tif.micromanager_metadata['summary']['BitDepth']
-        self.images = self.images.astype(np.int16)
+        self.images = self.images.astype(self.resolution)
         try:
             assert self.images.shape == (frames, height, width)
             print("TIFF Images loaded...")
         except AssertionError:
-            print("Assertion error")
-            print("TIFF Images loading...FAILED")
-            print(frames, height, width)
-            print(self.images.shape)
-            sys.exit()
+            n, xdim, ydim = self.images.shape
+            print("Warning: n. of loaded frames is less than expeced %i/%i" % (n, frames))
+            print("Original file: (", frames, height, width, ")")
+            print("Loaded file", self.images.shape)
+            frames = n
+
+            #sys.exit()
         # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
-        if max_gray_level != 2**bit_depth - 1:
-            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=bit_depth)
+        if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
+            print("The gray level range %i is smaller than the expected %i") % (max_gray_level, 2**bit_depth)
+            print("You could perform an histogram equalization")
+        if self.is_hist_equalization:
+            print("Equalizing...")
+            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=self.resolution)
             print("Done")
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
@@ -201,7 +221,7 @@ class Images:
             print("Do histogram equalization")
             for i, im in enumerate(images):
                 eqh = equalize_hist(im, nbins=2**bit_depth)*2**bit_depth
-                images[i] = eqh.astype(np.int16)
+                images[i] = eqh.astype(self.resolution)
         return images
 
 
@@ -280,17 +300,18 @@ class Images:
         return self.images, self.imageNumbers
 
 def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, crop=None, 
-                filtering=None, sigma=None, subtract=None, adjust_gray_level=True):
+    filtering=None, sigma=None, subtract=None):
     """
     subtract: int or None
         Subtract image # as background
     """
-    im = Images(root_dir, pattern, firstIm, lastIm, resize_factor, crop, filtering, sigma)
+    im = Images(root_dir=root_dir, pattern=pattern, firstIm=firstIm, lastIm=lastIm, 
+        resize_factor=resize_factor, crop=crop, filtering=filtering, sigma=sigma)
     images, imageNumbers = im.collector()
     if subtract is not None:
         # TODO: fix the way the gray level is renormalized
         # This is too rude!
-        images = images[subtract+1:] - images[subtract] + np.mean(images[subtract])
+        images = images[subtract+1:] - images[subtract] + np.int(np.mean(images[subtract]))
         imageNumbers = imageNumbers[subtract+1:]
     assert len(images) == len(imageNumbers)
     return images, imageNumbers
@@ -302,13 +323,15 @@ if __name__ == "__main__":
     #filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/01_irradiatedFilm_0.16A_10fps/01_irradiatedFilm_0.16A_10fps_MMStack_Pos0.ome.tif"
     filename = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps/01_irradiatedwires_0.19A_10fps_MMStack_Pos0.ome.tif"
     filename = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_2hours_242images/super_slow_creep_90mV_dc_2hours_242images_MMStack_Pos0.ome.tif"
+    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif"
+    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.12A_1fps/Irr_800He+_0.12A_1fps_MMStack_Pos0.ome.tif"
     root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"
     im_crop = None  
     #im_crop = (876,1117,0,1040)
     filtering = 'gauss'
-    filtering = None
+    #filtering = None
     sigma = 1.5
     out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=0)
     print(out.shape)

@@ -4,45 +4,12 @@ import configparser
 import colorsys
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.cm as cmx
-import matplotlib.colors as mpl_colors
 import pandas as pd
 from visualBarkh import StackImages
 import polar
 import iniConnector as iniC
+from mokas_colors import get_colors
 
-
-def get_cmap(N):
-    """Returns a function that maps each index 
-    in 0, 1, ... N-1 to a distinct RGB color.
-    http://stackoverflow.com/questions/14720331/how-to-generate-random-colors-in-matplotlib
-    """
-    color_norm  = mpl_colors.Normalize(vmin=0, vmax=N-1)
-    scalar_map = cmx.ScalarMappable(norm=color_norm, cmap='hsv') 
-    pColor = [scalar_map.to_rgba(i)[:3] for i in range(N)]
-    map_index_to_rgb_color = [[int(col[0]*255),int(col[1]*255),int(col[2]*255)] for col in pColor]
-    return map_index_to_rgb_color
-
-def get_colors(num_colors, palette='hue',norm=False):
-	black = np.array(3*[0])
-	white = np.array(3*[255])
-	if palette == 'hue':
-	    colors=[]
-	    for i in np.arange(0., 360., 360. / num_colors):
-	        hue = i/360.
-	        lightness = (50 + np.random.rand() * 10)/100.
-	        saturation = (90 + np.random.rand() * 10)/100.
-	        col = colorsys.hls_to_rgb(hue, lightness, saturation)
-	        c = [int(col[0]*255),int(col[1]*255),int(col[2]*255)]
-	        colors.append(c)
-	    colors = np.random.permutation(colors)
-	elif palette == 'pastel':
-		colors = (np.random.randint(0, 256, (num_colors,3)) + white) / 2
-		#colors = get_cmap(num_colors)
-	colors = np.vstack((black,colors))
-	if norm:
-		colors = colors/255.
-	return colors
 
 def get_rowcols(n):
 	if n <= 11:
