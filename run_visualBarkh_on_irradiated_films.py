@@ -167,11 +167,11 @@ if __name__ == "__main__":
             #imParameters['filtering'] = None
             imParameters['sigma'] = 2
             imParameters['subtract'] = 0 # Subtract a reference image
-            threshold = 20
+            threshold = 50
         elif k == 62:
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif"
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/02_Irr_8e8He+_0.1A_2fps"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/05_Irr_8e8He+_0.1A_2fps"
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
             #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
@@ -179,14 +179,16 @@ if __name__ == "__main__":
             imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
             imParameters['imCrop'] = None
             #imParameters['pattern'] = "Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif" 
-            imParameters['pattern'] = "Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
+            imParameters['pattern'] = "05_Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
             imParameters['lastIm'] = -1
-            imParameters['filtering'] = 'gauss'
-            #imParameters['filtering'] = None
+            #imParameters['filtering'] = 'bilateral'
+            imParameters['filtering'] = 'gauss_parallel'
+            #imParameters['filtering'] = 'gauss'
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
-            threshold = 20
+            threshold = 15
+            palette = 'coolwarm'
         else:
             print("Check the path!")
             sys.exit()

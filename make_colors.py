@@ -11,4 +11,4 @@ def get_colors(num_colors):
     return colors
 
 if __name__ == "__main__":
- 	colors = get_colors(50)
+ 	colors = get_colors(600)

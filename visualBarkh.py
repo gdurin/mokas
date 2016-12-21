@@ -22,15 +22,17 @@ import tables
 import polar
 import collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
-
+import mokas_gpu as mkGpu
 
 # Check if pycuda is available
 try:
     import pycuda.driver as driver
     isPyCuda = True
-    free_mem_gpu, total_mem_gpu = driver.mem_get_info()
+    print("isPyCuda")
+    #free_mem_gpu, total_mem_gpu = driver.mem_get_info()
 except:
     isPyCuda = False
+    print("is-NoT-PyCuda")
 
 # Load scikits modules if available
 try:
@@ -136,7 +138,8 @@ class StackImages:
     imCrop : 4-element tuple
        Crop the image
 
-    structure : NxN array
+    erase_small_events : int [None, or 0-100]
+        erase events which smaller than a % of the largest cluster (i.e. the total motion of the wall)
     """
 
     def __init__(self, subDirs, pattern, resize_factor=None,
@@ -149,7 +152,7 @@ class StackImages:
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
-                 use_max_criterium=True):
+                 erase_small_events=None):
         """
         Initialized the class
         """
@@ -177,7 +180,7 @@ class StackImages:
         self.is_find_contours = False
         self.isTwoImages = False
         self.is_minmax_switches = False
-        self.use_max_criterium = use_max_criterium
+        self.erase_small_events = erase_small_events
         self.pattern = pattern
         #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         self.NNstructure = np.ones((3,3))
@@ -543,13 +546,12 @@ class StackImages:
             #kernel32 = np.asarray(kernel, dtype=np.int32)
             stack32 = np.asarray(self.Array, dtype=np.int32)
             need_mem = 2 * stack32.nbytes +  2 * stack32[0].nbytes 
-            driver.Device(device).make_context()
-            free_mem_gpu, total_mem_gpu = driver.mem_get_info()
+            current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
             print("Total memory to be used: %.2f GB" % (need_mem/1e9))
             print("Total memory of %s: %.2f GB" % (driver.Device(device).name(), total_mem_gpu/1e9))
             free_mem_gpu = 0.9*free_mem_gpu
             if need_mem < free_mem_gpu:
-                switchTimes, switchSteps = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, device=device)
+                switchTimes, switchSteps = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
             else:
                 nsplit = int(float(need_mem)/free_mem_gpu) + 1
                 print("Splitting images in %d parts..." % nsplit)
@@ -560,7 +562,7 @@ class StackImages:
                 for k, stack32 in enumerate(stack32s):
                     print("Calculation split %i" % k)
                     #a = stack32.astype(np.int32)
-                    switch, step = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, device=device)
+                    switch, step = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
                     if not k:
                         switchTimes = switch
                         switchSteps = step
@@ -570,13 +572,10 @@ class StackImages:
             self._switchSteps = switchSteps.flatten()
             # Add the value of the first image
             self._switchTimes = self.imageNumbers[0] + switchTimes.flatten()
-            # Add the position of the set by the kernel_internal_points:
-            #if self.kernel_internal_points != 0:
-            #    if self.kernel_switch_position == "center":
-            #        self._switchTimes += np.int(self.kernel_internal_points/2)
-            #    elif self.kernel_switch_position == "end":
-            #        self._switchTimes += np.int(self.kernel_internal_points)
-            #self._switchTimes[self._swithTimes == self.lastIm] = 
+            # Close device properly
+            success = mkGpu.gpu_deinit(current_dev, ctx)
+            if not success:
+                print("There is a problem with the device %i" % device)
             print('Analysing done in %f seconds' % (time.time()-startTime))
         else:
             # DO NOT USE!
@@ -623,8 +622,8 @@ class StackImages:
             The value to set in the array for the non-switching pixel (below the threshold)
             -1 is used as the last value of array when used as index (i.e. with colors)
         """
-
-        self.isPixelSwitched = self._switchSteps >= self._threshold
+        # self.isPixelSwitched = (self._switchSteps >= self._threshold)
+        self.isPixelSwitched = (self._switchSteps >= self._threshold) & (self._switchTimes > self.kernel_half_width_of_ones)
         maskedSwitchTimes = ma.array(self._switchTimes, mask = ~self.isPixelSwitched)
         # Move to the first switch time if required
         self._switchTimesOverThreshold = maskedSwitchTimes.compressed()
@@ -682,20 +681,27 @@ class StackImages:
         self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
         self._switchTimes2D_original = np.copy(self._switchTimes2D)
         # Now check if getting rid of the wrong switches 
-        if self.use_max_criterium:
+        if self.erase_small_events:
+            percentage = self.erase_small_events/100.
             # This gets rid of the wrong switches
-            # Using the cluster max size for the switches
+            # Using the cluster max sizes for the switches
             # It redefines self._switchTimes2D
-            self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)
-            self._switchTimes2D[self.final_domain == False] = -1
-            # Calculate the initial domain
-            im, n_cluster = mahotas.label(~self.final_domain, self.NNstructure)
+            #self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)
+            #self._switchTimes2D[self.final_domain == False] = -1
+            # Erase small event
+            #im, n_cluster = mahotas.label(~self.final_domain, self.NNstructure)
+            q = np.copy(self._switchTimes2D)
+            q[q == -1] = 0
+            im, n_cluster = mahotas.label(q, self.NNstructure)
             im = mahotas.labeled.remove_bordering(im)
-            sizes = mahotas.labeled.labeled_size(im)[1:]
-            index_max_size = sizes.argmax()
-            self.initial_domain = im == index_max_size + 1
-        #self.minmax_switches()
-
+            im, n_cluster = mahotas.labeled.relabel(im)
+            sizes = mahotas.labeled.labeled_size(im)
+            too_small = np.where(sizes < percentage * np.max(sizes[1:]))
+            im = mahotas.labeled.remove_regions(im, too_small)
+            #index_max_size = sizes.argmax()
+            #self.initial_domain = im == index_max_size + 1
+            # Erase the small switches
+            self._switchTimes2D[im == 0] = fillValue
         if fillValue in self._switchTimes2D:
             self._switchTimesUnique = np.unique(self._switchTimes2D)[1:] + self.min_switch
         else:

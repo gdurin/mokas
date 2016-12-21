@@ -13,6 +13,8 @@ import scipy.signal as signal
 import skimage
 import skimage.io as im_io
 from skimage.exposure import equalize_hist
+import bilateralFilter2 as blf
+import gaussianFilter as gf
 from PIL import Image
 
 
@@ -63,14 +65,14 @@ class Images:
         self.filtering = filtering
         self.sigma = sigma
         self.mode = self._set_mode()
-        print(resolution)
+        #print(resolution)
         if resolution == 8:
             self.resolution = np.int8
         elif resolution == 16:
             self.resolution = np.int16
         elif resolution == 32:
             self.resolution = np.int32
-        print(self.resolution)
+        #print(self.resolution)
         self.is_hist_equalization = is_hist_equalization
         #print(self.mode)
         if self.mode == 'pattern':
@@ -191,9 +193,16 @@ class Images:
             print("Len of imageNumbers: %i") % len(self.imageNumbers)
         # Filtering
         if self.filtering:
-            for n, image in enumerate(self.images):
-                self.images[n] = self._image_filter(image)
-
+            if self.filtering == 'bilateral':
+                self.images_raw = np.copy(self.images)
+                self.images = self._image_filter(self.images_raw)
+            elif self.filtering == 'gauss_parallel':
+                #self.images_raw = np.copy(self.images)
+                self.images = self._image_filter(self.images)#_raw)
+            else:
+                for n, image in enumerate(self.images):
+                    self.images[n] = self._image_filter(image)
+       
     def _image_crop(self, crop_limits):
         """
         crop limits are in the image reference frame (not of array)
@@ -211,7 +220,17 @@ class Images:
         return None
 
     def _image_filter(self, image):
-        return filters[self.filtering](image, self.sigma)
+        if self.filtering == 'bilateral':
+            radius, delta, repetitions = 5, 20., 5 #small radius, delta half of jump (for big delta, far colors are closer and get mixed, repetitions can be many if radius is small)
+            out = blf.bilateralFilter(image, radius, self.sigma, delta, repetitions, device=0)
+            return out
+        elif self.filtering == 'gauss_parallel':
+            radius = 5
+            out = gf.gaussianFilter(image, radius, self.sigma, device=0)
+            return out
+
+        else:
+            return filters[self.filtering](image, self.sigma)
 
     def _image_equalize_hist(self, images, full_sequence=True, bit_depth=12):
         # Do histogram equalization (experimental)
@@ -318,22 +337,16 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, cr
 
 
 if __name__ == "__main__":
-    #filename = "/home/gf/Meas/Creep/WCoFeB/Const_InPl_Vary_OOP/exp_40mV_20s_21.avi"
-    #filename = "/home/gf/Meas/Creep/WCoFeB/Const_InPl_Vary_OOP/exp_50mV_6s_19.avi"
-    #filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/01_irradiatedFilm_0.16A_10fps/01_irradiatedFilm_0.16A_10fps_MMStack_Pos0.ome.tif"
-    filename = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/01_irradiatedwires_0.19A_10fps/01_irradiatedwires_0.19A_10fps_MMStack_Pos0.ome.tif"
-    filename = "/home/gf/Meas/Creep/WCoFeB/super_slow_creep_90mV_dc_2hours_242images/super_slow_creep_90mV_dc_2hours_242images_MMStack_Pos0.ome.tif"
-    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif/Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif"
-    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_800He+_0.12A_1fps/Irr_800He+_0.12A_1fps_MMStack_Pos0.ome.tif"
+    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/05_Irr_8e8He+_0.1A_2fps/05_Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
     root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"
     im_crop = None  
     #im_crop = (876,1117,0,1040)
-    filtering = 'gauss'
-    #filtering = None
-    sigma = 1.5
-    out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=0)
+    #filtering = 'gauss_parallel'
+    filtering = None
+    sigma = 2
+    out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=None)
     print(out.shape)
     #fout = "exp_40mV_20s_21.pkl"
     #pickle.dump(out, fout)
