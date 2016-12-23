@@ -13,6 +13,7 @@ import scipy.signal as signal
 import skimage
 import skimage.io as im_io
 from skimage.exposure import equalize_hist
+from skimage.exposure import equalize_adapthist
 import bilateralFilter2 as blf
 import gaussianFilter as gf
 from PIL import Image
@@ -155,7 +156,7 @@ class Images:
         cap.release()
 
     def _from_tif(self):
-        with tifffile.TiffFile(self.filename, maxpages=100) as tif:
+        with tifffile.TiffFile(self.filename) as tif:
             frames = tif.micromanager_metadata['summary']['Frames']
             height = tif.micromanager_metadata['summary']['Height']
             width = tif.micromanager_metadata['summary']['Width']
@@ -175,12 +176,18 @@ class Images:
 
             #sys.exit()
         # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
+        self.is_hist_equalization = True
         if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
             print("The gray level range %i is smaller than the expected %i") % (max_gray_level, 2**bit_depth)
             print("You could perform an histogram equalization")
+        if max_gray_level <= .8*2**bit_depth:
+            self.is_hist_equalization = True
+            print("The gray level range %i is way smaller than the expected %i!") % (max_gray_level, 2**bit_depth)
+            print("I am performing an histogram equalization")
         if self.is_hist_equalization:
             print("Equalizing...")
-            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=self.resolution)
+            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=bit_depth)
+            factor = 2**bit_depth/float(max_gray_level)
             print("Done")
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
@@ -221,7 +228,8 @@ class Images:
 
     def _image_filter(self, image):
         if self.filtering == 'bilateral':
-            radius, delta, repetitions = 5, 20., 5 #small radius, delta half of jump (for big delta, far colors are closer and get mixed, repetitions can be many if radius is small)
+            delta = int(np.std(self.images.flatten())*0.1)
+            radius, repetitions = 5, 3 #small radius, delta half of jump (for big delta, far colors are closer and get mixed, repetitions can be many if radius is small)
             out = blf.bilateralFilter(image, radius, self.sigma, delta, repetitions, device=0)
             return out
         elif self.filtering == 'gauss_parallel':
@@ -235,7 +243,7 @@ class Images:
     def _image_equalize_hist(self, images, full_sequence=True, bit_depth=12):
         # Do histogram equalization (experimental)
         if full_sequence:
-            images = equalize_hist(images, nbins=2**bit_depth)*2**bit_depth
+            images = equalize_hist(images, nbins=(2**bit_depth))*(2**bit_depth)
         else:
             print("Do histogram equalization")
             for i, im in enumerate(images):

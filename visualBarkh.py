@@ -623,6 +623,12 @@ class StackImages:
             -1 is used as the last value of array when used as index (i.e. with colors)
         """
         # self.isPixelSwitched = (self._switchSteps >= self._threshold)
+        ### 
+        #get sigma from hist of images and use it as threshold
+        ###
+        self._threshold = int(np.std(self.Array.flatten())*0.1)
+        print("estimated threshold = %d"%self._threshold)
+
         self.isPixelSwitched = (self._switchSteps >= self._threshold) & (self._switchTimes > self.kernel_half_width_of_ones)
         maskedSwitchTimes = ma.array(self._switchTimes, mask = ~self.isPixelSwitched)
         # Move to the first switch time if required
