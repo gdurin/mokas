@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import pickle
 import tifffile
+from libtiff import TIFFfile 
 import scipy.ndimage as nd
 import scipy.signal as signal
 import skimage
@@ -155,15 +156,26 @@ class Images:
         self.imageNumbers = range(k)
         cap.release()
 
-    def _from_tif(self):
-        with tifffile.TiffFile(self.filename) as tif:
-            frames = tif.micromanager_metadata['summary']['Frames']
-            height = tif.micromanager_metadata['summary']['Height']
-            width = tif.micromanager_metadata['summary']['Width']
-            self.images = tif.asarray()
-            max_gray_level = tif.micromanager_metadata['display_settings'][0]['Max']
-            bit_depth = tif.micromanager_metadata['summary']['BitDepth']
-        self.images = self.images.astype(self.resolution)
+    def _from_tif(self, memmap=True):
+	if memmap:
+	    tiff = TIFFfile(self.filename)
+	    self.images = tiff.get_tiff_array()
+	    ll = tiff.get_info().split("\n")
+	    td = dict((x.strip(),y.strip()) for x,y in [l.split(":") for l in ll if ":" in l])
+	    frames = np.int(td['Number of images'])
+	    height = np.int(td['ImageLength'])
+	    width = np.int(td['ImageWidth'])
+	    bit_depth = 12
+	    max_gray_level = 2**bit_depth - 1
+	else:
+	    with tifffile.TiffFile(self.filename) as tif:
+        	frames = tif.micromanager_metadata['summary']['Frames']
+                height = tif.micromanager_metadata['summary']['Height']
+                width = tif.micromanager_metadata['summary']['Width']
+                self.images = tif.asarray()
+                max_gray_level = tif.micromanager_metadata['display_settings'][0]['Max']
+                bit_depth = tif.micromanager_metadata['summary']['BitDepth']
+            self.images = self.images.astype(self.resolution)
         try:
             assert self.images.shape == (frames, height, width)
             print("TIFF Images loaded...")
@@ -176,7 +188,7 @@ class Images:
 
             #sys.exit()
         # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
-        self.is_hist_equalization = True
+        self.is_hist_equalization = False
         if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
             print("The gray level range %i is smaller than the expected %i") % (max_gray_level, 2**bit_depth)
             print("You could perform an histogram equalization")
