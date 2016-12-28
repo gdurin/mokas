@@ -8,7 +8,7 @@ import numpy as np
 import cv2
 import pickle
 import tifffile
-from libtiff import TIFFfile 
+from libtiff import TIFFfile, TIFF
 import scipy.ndimage as nd
 import scipy.signal as signal
 import skimage
@@ -156,29 +156,27 @@ class Images:
         self.imageNumbers = range(k)
         cap.release()
 
-    def _from_tif(self, memmap=True):
-	if memmap:
-	    tiff = TIFFfile(self.filename)
-	    self.images = tiff.get_tiff_array()
-	    ll = tiff.get_info().split("\n")
-	    td = dict((x.strip(),y.strip()) for x,y in [l.split(":") for l in ll if ":" in l])
-	    frames = np.int(td['Number of images'])
-	    height = np.int(td['ImageLength'])
-	    width = np.int(td['ImageWidth'])
-	    bit_depth = 12
-	    max_gray_level = 2**bit_depth - 1
-	else:
-	    with tifffile.TiffFile(self.filename) as tif:
-        	frames = tif.micromanager_metadata['summary']['Frames']
+    def _from_tif(self):
+        try:
+            with tifffile.TiffFile(self.filename) as tif:
+                frames = tif.micromanager_metadata['summary']['Frames']
                 height = tif.micromanager_metadata['summary']['Height']
                 width = tif.micromanager_metadata['summary']['Width']
-                self.images = tif.asarray()
                 max_gray_level = tif.micromanager_metadata['display_settings'][0]['Max']
                 bit_depth = tif.micromanager_metadata['summary']['BitDepth']
+                self.images = tif.asarray()
             self.images = self.images.astype(self.resolution)
+        except UnboundLocalError:
+            print("Cannot load the %s file, try using libtiff (slower)" % self.pattern)
+            print("frames: %i, size: (%i,%i), bit depth: %i, max of gray level %i" % (frames, height, width, bit_depth, max_gray_level))
+            tif = TIFF.open(self.filename, mode='r')
+            self.images = np.empty((frames, height, width)).astype(self.resolution)
+            for i,image in enumerate(tif.iter_images()):
+                self.images[i] = image
+            tif.close()
         try:
             assert self.images.shape == (frames, height, width)
-            print("TIFF Images loaded...")
+            print("TIFF Images loaded... ", self.images.shape)
         except AssertionError:
             n, xdim, ydim = self.images.shape
             print("Warning: n. of loaded frames is less than expeced %i/%i" % (n, frames))
@@ -189,18 +187,18 @@ class Images:
             #sys.exit()
         # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
         self.is_hist_equalization = False
-        if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
-            print("The gray level range %i is smaller than the expected %i") % (max_gray_level, 2**bit_depth)
-            print("You could perform an histogram equalization")
-        if max_gray_level <= .8*2**bit_depth:
-            self.is_hist_equalization = True
-            print("The gray level range %i is way smaller than the expected %i!") % (max_gray_level, 2**bit_depth)
-            print("I am performing an histogram equalization")
-        if self.is_hist_equalization:
-            print("Equalizing...")
-            self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=bit_depth)
-            factor = 2**bit_depth/float(max_gray_level)
-            print("Done")
+        # if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
+        #     print("The gray level range %i is smaller than the expected %i") % (max_gray_level, 2**bit_depth)
+        #     print("You could perform an histogram equalization")
+        # if max_gray_level <= .8*2**bit_depth:
+        #     self.is_hist_equalization = True
+        #     print("The gray level range %i is way smaller than the expected %i!") % (max_gray_level, 2**bit_depth)
+        #     print("I am performing an histogram equalization")
+        # if self.is_hist_equalization:
+        #     print("Equalizing...")
+        #     self.images = self._image_equalize_hist(self.images, full_sequence=True, bit_depth=bit_depth)
+        #     factor = 2**bit_depth/float(max_gray_level)
+        #     print("Done")
         self.images, self.imageNumbers = self._set_limits(self.images, frames)
         try:
             assert len(self.images) == len(self.imageNumbers)
@@ -212,6 +210,7 @@ class Images:
             print("Len of imageNumbers: %i") % len(self.imageNumbers)
         # Filtering
         if self.filtering:
+            print("Filtering using %s" % self.filtering)
             if self.filtering == 'bilateral':
                 self.images_raw = np.copy(self.images)
                 self.images = self._image_filter(self.images_raw)
@@ -221,6 +220,7 @@ class Images:
             else:
                 for n, image in enumerate(self.images):
                     self.images[n] = self._image_filter(image)
+            print("Done")
        
     def _image_crop(self, crop_limits):
         """
@@ -243,14 +243,15 @@ class Images:
             delta = int(np.std(self.images.flatten())*0.1)
             radius, repetitions = 5, 3 #small radius, delta half of jump (for big delta, far colors are closer and get mixed, repetitions can be many if radius is small)
             out = blf.bilateralFilter(image, radius, self.sigma, delta, repetitions, device=0)
-            return out
         elif self.filtering == 'gauss_parallel':
             radius = 5
             out = gf.gaussianFilter(image, radius, self.sigma, device=0)
-            return out
-
         else:
-            return filters[self.filtering](image, self.sigma)
+            out = filters[self.filtering](image, self.sigma)
+        if out.dtype is not np.dtype(self.resolution):
+            print("Converting to %s" % str(self.resolution))
+            out = out.astype(self.resolution)
+        return out
 
     def _image_equalize_hist(self, images, full_sequence=True, bit_depth=12):
         # Do histogram equalization (experimental)
@@ -356,15 +357,23 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, cr
     return images, imageNumbers
 
 
+
+
 if __name__ == "__main__":
-    filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/05_Irr_8e8He+_0.1A_2fps/05_Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
-    root_dir, pattern = os.path.split(filename)
+    #filename = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/Irr_800He/Irr_400uC_8e8He+/05_Irr_8e8He+_0.1A_2fps/05_Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
+    # The file below contains 600 frames
+    #root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A"
+    #pattern = "02_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+    # The file below contains 800 frames
+    root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_400uC/01_Irr_400uC_0.1A"
+    pattern = "01_Irr_400uC_0.1A_MMStack_Pos0.ome.tif"
+    #root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"
     im_crop = None  
     #im_crop = (876,1117,0,1040)
-    #filtering = 'gauss_parallel'
-    filtering = None
+    filtering = 'gauss_parallel'
+    #filtering = None
     sigma = 2
     out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=None)
     print(out.shape)

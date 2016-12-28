@@ -14,12 +14,8 @@ def gaussianFilter(stackImages, radius, sigma, device=0):
     startTime = time.time()
     stack32 = np.asarray(stackImages, dtype=np.float32)
     need_mem = 2 * stack32.nbytes +  np.dtype(np.float32).itemsize * (2 * radius + 1)**2
-    #free_mem_gpu, total_mem_gpu = driver.mem_get_info()
-    current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
-    print("current device: %s" % current_dev.name())
     print("Total memory to be used: %.2f GB" % (need_mem/1e9))
-    print("Total memory of %s: %.2f GB" % (current_dev.name(), total_mem_gpu/1e9))
-    free_mem_gpu = 0.9 * total_mem_gpu
+    current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
     if need_mem < free_mem_gpu:
         #change with parallel filtering
         stack32 = do_gaussianFilter(stack32, radius, sigma)

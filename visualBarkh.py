@@ -545,11 +545,9 @@ class StackImages:
         if isPyCuda and isCuda:
             #kernel32 = np.asarray(kernel, dtype=np.int32)
             stack32 = np.asarray(self.Array, dtype=np.int32)
-            need_mem = 2 * stack32.nbytes +  2 * stack32[0].nbytes 
-            current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
+            need_mem = 2 * stack32.nbytes +  2 * stack32[0].nbytes
             print("Total memory to be used: %.2f GB" % (need_mem/1e9))
-            print("Total memory of %s: %.2f GB" % (driver.Device(device).name(), total_mem_gpu/1e9))
-            free_mem_gpu = 0.9*free_mem_gpu
+            current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
             if need_mem < free_mem_gpu:
                 switchTimes, switchSteps = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
             else:

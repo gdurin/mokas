@@ -177,12 +177,22 @@ if __name__ == "__main__":
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_400uC/01_Irr_400uC_0.1A"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Irradiated/01_irradiatedFilm_0.16A_10fps"
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_400uC_8e8He+/07_Irr_8e8He+_0.2A_100ms"
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.116A_3s"#NOT WORKING!!!
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.116A_3s"#NOT WORKING!!!
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A" # it should not work as well
+            
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/04_NonIrr_0.15A_100ms/"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/01_NonIrr_0.15A_100ms/"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/01_Irr_16e8He+_0.232A_700ms/"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/04_Irr_16e8He+_0.116A_3s/"
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/01_Irr_8e8He+_0.1A_2fps"
+
+            # On Genesis
+            # Loading ok, memory allocation problems in doing the filter (600, :, :)
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A"
+            imParameters['pattern'] = "02_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+            # Loading ok, beautiful growth
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.232A"
+            #imParameters['pattern'] = "02_Irr_800uC_0.232A_MMStack_Pos0.ome.tif"
 
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
@@ -196,7 +206,8 @@ if __name__ == "__main__":
             #imParameters['pattern'] = "Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif"
             # imParameters['pattern'] = "01_irradiatedFilm_0.16A_10fps_MMStack_Pos0.ome.tif"
             #imParameters['pattern'] = "07_Irr_8e8He+_0.2A_100ms_MMStack_Pos0.ome.tif"
-            imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"#NOT WORKING!!!
+            #imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"#NOT WORKING!!!
+            #imParameters['pattern'] = "02_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
             # imParameters['pattern'] = "04_NonIrr_0.15A_100ms_MMStack_Pos0.ome.tif"
             # imParameters['pattern'] = "01_NonIrr_0.15A_100ms_MMStack_Pos0.ome.tif"
             # imParameters['pattern'] = "01_Irr_16e8He+_0.232A_700ms_MMStack_Pos0.ome.tif"
@@ -205,8 +216,8 @@ if __name__ == "__main__":
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
             imParameters['lastIm'] = -1
             #imParameters['filtering'] = 'bilateral'
-            imParameters['filtering'] = 'gauss_parallel'
-            #imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = 'gauss_parallel'
+            imParameters['filtering'] = 'gauss'
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
             threshold = 2
