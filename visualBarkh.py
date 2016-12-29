@@ -610,8 +610,6 @@ class StackImages:
 
         Parameters:
         ----------------
-        self._threshold : int
-            The miminum value of the gray level change at the switch
         isFirstSwitchZero : bool
             Put the first switch equal to zero, useful to set the colors
             in a long sequence of images where the first avalanche
@@ -624,9 +622,6 @@ class StackImages:
         ### 
         #get sigma from hist of images and use it as threshold
         ###
-        self._threshold = int(np.std(self.Array.flatten())*0.1)
-        print("estimated threshold = %d"%self._threshold)
-
         self.isPixelSwitched = (self._switchSteps >= self._threshold) & (self._switchTimes > self.kernel_half_width_of_ones)
         maskedSwitchTimes = ma.array(self._switchTimes, mask = ~self.isPixelSwitched)
         # Move to the first switch time if required
@@ -648,7 +643,7 @@ class StackImages:
         self.getSwitchTimesAndSteps()
         return
 
-    def _getColorImage(self, palette, noSwitchColor='black'):
+    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=None, fillValue=-1):
         """
         Calculate the color Image using the output of getSwitchTimesAndSteps
 
@@ -678,18 +673,16 @@ class StackImages:
         # Calculate the colours, considering the range of the switch values obtained
         self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
         self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
-        central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
         # Calculate the switch time Array (2D) considering the threshold and the start from zero
-        fillValue = -1
         self._switchTimes2D = self._getSwitchTimesOverThreshold(False, fillValue).reshape(self.dimX, self.dimY)
         self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
-        self._switchTimes2D_original = np.copy(self._switchTimes2D)
-        # Now check if getting rid of the wrong switches 
-        if self.erase_small_events:
-            percentage = self.erase_small_events/100.
+        #self._switchTimes2D_original = np.copy(self._switchTimes2D)
+        # Now check if getting rid of the wrong switches
+        # It redefines self._switchTimes2D
+        if erase_small_events_percent:
+            percentage = erase_small_events_percent/100.
             # This gets rid of the wrong switches
             # Using the cluster max sizes for the switches
-            # It redefines self._switchTimes2D
             #self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)
             #self._switchTimes2D[self.final_domain == False] = -1
             # Erase small event
@@ -714,8 +707,9 @@ class StackImages:
         return
 
 
-    def showColorImage(self, threshold, data=None, palette='random', plotHist=True, plot_contours=False,
-                       noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
+    def showColorImage(self, threshold=None, data=None, palette='random', erase_small_events_percent=None,
+                        plotHist=False, plot_contours=False,
+                        noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
         """
         Show the calculated color Image of the avalanches.
         Run getSwitchTimesAndSteps if not done before.
@@ -731,19 +725,28 @@ class StackImages:
             'hue' : equally spaced colors in the HUE weel
             'randomHue' : random of above
             'ral': ral colors
+            'coolwarm': from Red to Blue
+            'pastel': add white to random colors
+        erase_small_events_percent: int, optional
+            Erase events smaller than a percentage of the largest one 
         noSwithColor: string, optional, default = 'black'
             background color for pixels having gray_level_change below the threshold
         """
         # set the threshold
-        self._threshold = threshold
+        estimated_threshold = int(np.std(self.Array.flatten())*0.1)
+        print("Estimated threshold = %d" % estimated_threshold)
+        if not threshold:
+            self._threshold = estimated_threshold
+        else:
+            self._threshold = threshold
         # Calculate the Color Image
-        self._getColorImage(palette, noSwitchColor)
+        self._getColorImage(palette, noSwitchColor, erase_small_events_percent)
         # Prepare to plot
-        if data == None:
+        if data is None:
             data = self._switchTimes2D
         if fig is None:
             self._figColorImage = self._plotColorImage(data, 
-                self._colorMap, self._figColorImage,title=title,figsize=figsize)
+                self._colorMap, self._figColorImage, title=title, figsize=figsize)
             fig = self._figColorImage
         else:
             fig = self._plotColorImage(data, colorMap=self._colorMap, fig=fig, ax=ax, title=title)
