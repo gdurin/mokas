@@ -23,6 +23,7 @@ import polar
 import collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
+from mokas_domains import Domains
 
 # Check if pycuda is available
 try:
@@ -118,28 +119,9 @@ class StackImages:
        for 'wiener': A scalar or an N-length list as size of the Wiener filter
        window in each dimension.
     
-    Kernel: is the (step-like) function to calculate the correlation 
-    with the sequence of grey levels. 
-    The transition from -1 to 1 or from 1 to -1 is calculated on the base of the 
-    sequence of the images, taken the first and the last gray average levels.
-    The simple form is a step function, where:
-    kernel_half_width (int) is the number of points at left (-1) and at the right (+1)
-    kernel_internal_points is the number of point between the -1 and -1;
-    kernel_internal_points = 0 (default) : step function
-    kernel_internal_points = 1 : [-1, -1, -1, 0, +1, +1, +1]
-    kernel_internal_points = 2 : [-1, -1, -1, -0.33, +0.33, +1, +1, +1]
-    kernel_internal_points = 3 : [-1, -1, -1, -0.5, 0, +0.5, +1, +1, +1]
-    kernel_internal_points = 4 : [-1, -1, -1, -0.6, -0.2, +0.2, +0.6, +1, +1, +1]
-    kernel_internal_points = 5 : [-1, -1, -1, -0.66, -0.33, 0, +0.33, 0.66, +1, +1, +1]
-
-    boundary : 'open' or None; 'periodic' What is this?
-
-
     imCrop : 4-element tuple
        Crop the image
 
-    erase_small_events : int [None, or 0-100]
-        erase events which smaller than a % of the largest cluster (i.e. the total motion of the wall)
     """
 
     def __init__(self, subDirs, pattern, resize_factor=None,
@@ -150,8 +132,6 @@ class StackImages:
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
-                 exclude_switches_from_central_domain=True,
-                 exclude_switches_out_of_final_domain=True,
                  erase_small_events=None):
         """
         Initialized the class
@@ -190,8 +170,8 @@ class StackImages:
             self.boundary = None
         if not lastIm:
             lastIm = -1
-        self.exclude_switches_from_central_domain = exclude_switches_from_central_domain
-        self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
+        #self.exclude_switches_from_central_domain = exclude_switches_from_central_domain
+        #self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
 
         # Check paths
         if not os.path.isdir(self._mainDir):
@@ -367,33 +347,6 @@ class StackImages:
         # This is valid for the step kernel ONLY
         x =  np.arange(switch - l0, switch + l0)
         ax.plot(x, kernel, '-o')
-
-        # The code below assumed to have two kernels;
-        # Now it is no longer used. To be erased in the near future
-        # =================================================================
-        # Add the two kernels function
-        # kernels = [self.kernel, self.kernel0]
-        # for k,kernel in enumerate(['step','zero']):	
-        #     switch, (value_left, value_right) = self.getSwitchTime(pixel, useKernel=kernel)
-        #     print("switch %s, Kernel = %s" % (kernel, switch))
-        #     print(("gray level change at switch = %s") % abs(value_left-value_right))
-        #     if not show_kernel:
-        #         break
-        #     if width == 'small':
-        #         halfWidth = len(kernels[k])/2
-        #         x0,x1 = switch - halfWidth - 1*(k==1), switch + halfWidth
-        #         x = range(x0,x1)
-        #         n_points_left = halfWidth
-        #         n_points_rigth = halfWidth
-        #     elif width=='all':
-        #         #x = range(len(pxt))
-        #         x = self.imageNumbers
-        #         n_points_left = (switch-x[0]) - 1 * (k==1)
-        #         n_points_right = len(x) - (switch - x[0])
-        #         y = n_points_left * [value_left] + [(value_left+value_right)/2.]\
-        #             *(k==1) + n_points_right * [value_right]
-        #         print(len(x), len(y))
-        # =================================================================
         plt.legend()
         plt.show()
 
@@ -643,7 +596,7 @@ class StackImages:
         self.getSwitchTimesAndSteps()
         return
 
-    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=None, fillValue=-1):
+    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=10, fillValue=-1):
         """
         Calculate the color Image using the output of getSwitchTimesAndSteps
 
@@ -695,6 +648,7 @@ class StackImages:
             sizes = mahotas.labeled.labeled_size(im)
             too_small = np.where(sizes < percentage * np.max(sizes[1:]))
             im = mahotas.labeled.remove_regions(im, too_small)
+            print("Small events erased")
             #index_max_size = sizes.argmax()
             #self.initial_domain = im == index_max_size + 1
             # Erase the small switches
@@ -789,15 +743,15 @@ class StackImages:
         as it depends on the length of the string retured by
         _call_pixel_switch
         """
-        if fig == None:
+        if not fig:
             fig = plt.figure()
-            fig.set_size_inches(*figsize,forward=True)
-            ax = fig.add_subplot(1,1,1)
+            fig.set_size_inches(*figsize, forward=True)
+            ax = fig.add_subplot(1, 1, 1)
         else:
             fig = plt.figure(fig.number)
             if ax is None:
                 ax = fig.gca()
-        ax.format_coord = lambda p0,p1: self._call_pixel_switch(p0, p1)
+        ax.format_coord = lambda p0, p1: self._call_pixel_switch(p0, p1)
         # Sets the limits of the image
         extent = 0, self.dimY, self.dimX, 0
         bounds = np.unique(data)
@@ -816,8 +770,8 @@ class StackImages:
 
     def plotHistogram(self,data,fig=None,ax=None,title=None,ylabel=None):
         central_points = np.array(np.unique(data), dtype=float)
-        rng = np.append(central_points, central_points[-1]+1)-0.5
-        if fig is not None:
+        rng = np.append(central_points, central_points[-1] + 1) - 0.5
+        if fig:
             plt.figure(fig.number)
             if ax is None:
                 ax = plt.gca()
@@ -1529,38 +1483,6 @@ class StackImages:
         f5.close()
         return
 
-    def _max_switch_not_touching_edges(self, sw):
-        """
-        Calculated the max switch with a fully internal domain 
-        It is used to calculate the initial nucleated domain 
-        This is too slow
-        """
-        q = np.copy(self._switchTimes2D)
-        # The code below is too slow
-        # switch0 = sw[0]
-        # for switch in sw:
-        #     im, n_cluster = mahotas.label(q==switch, self.NNstructure)
-        #     if '0000' not in [gal.getAxyLabels(im==n) for n in range(1,n_cluster+1)]:
-        #         return switch0
-        #     else:
-        #         switch0 = switch
-        # return sw[-1]
-        # Replace with this
-        im, n_cluster = mahotas.label(q!=-1, self.NNstructure)
-        max_size = mahotas.labeled.labeled_size(im)[1:]
-        index_max_size = max_size.argmax()
-    
-    def minmax_switches(self):
-        self.sw = np.unique(self._switchTimes2D)
-        if self.sw[0] == -1:
-            self.n_first = 1
-        else:
-            self.n_first = 0
-        self.firstSw = self.sw[self.n_first]
-        self.max_switch = self._max_switch_not_touching_edges(self.sw[self.n_first:])
-        self.is_minmax_switches = True
-
-
     def _find_final_domain(self, data, fillValue=-1):
         """
         find the final domain
@@ -1666,9 +1588,9 @@ class StackImages:
 
 
     def find_contours(self, lines_color=None, invert_y_axis=True, step_image=1,
-                        consider_events_around_a_central_domain=True, 
+                        consider_events_around_a_central_domain=True,
                         initial_domain_region=None, remove_bordering=False,
-                        plot_centers_of_mass = False, reference=None, 
+                        plot_centers_of_mass = False, reference=None,
                         rescale_area=False, plot_rays=True,
                         fig=None, ax=None, title=None):
         """
@@ -1679,7 +1601,7 @@ class StackImages:
         Parameters:
         -----------
         lines_color : string
-           Color of the lines 
+           Color of the lines
         step_image : int
             step in the image sequence to calculate the contour
         remove_bordering : bool
@@ -1698,41 +1620,37 @@ class StackImages:
         self.bubbles = {}
         self.centers_of_mass = {}
         # find the initial domain
-        if self.use_max_criterium:
-            central_domain = self.initial_domain
-            size_central_domain = np.sum(central_domain)
-            yc,xc = nd.measurements.center_of_mass(central_domain)
-        else:
-            (yc,xc), central_domain, size_central_domain = self.find_central_domain(initial_domain_region)
-        cnts0 = measure.find_contours(central_domain,.5)[0]
+        self.domain = Domains(self._switchTimes2D)
+        central_domain = self.domain.get_initial_domain(is_remove_small_holes=False)
+        size_central_domain = np.sum(central_domain)
+        yc, xc = nd.measurements.center_of_mass(central_domain)
+        cnts0 = measure.find_contours(central_domain, 0.5)[0]
         self.contours[0] = cnts0
         self.bubbles[0] = central_domain
-        self.centers_of_mass[0] = (yc,xc)
+        self.centers_of_mass[0] = (yc, xc)
         # Rescale the area if needed
         if rescale_area:
             scaling = size_central_domain**0.5
         else:
             scaling = 1.
         # Plot the central domain
-        X,Y = cnts0[:,1], cnts0[:,0]
+        X, Y = cnts0[:, 1], cnts0[:, 0]
         # Plot the center of mass of the nucleated domain
         if reference == 'center_of_mass':
-            X,Y = (X-xc)/scaling, (Y-yc)/scaling
-            ax.plot(0,0,'o',color=lines_color)
+            X, Y = (X - xc) / scaling, (Y - yc) / scaling
+            ax.plot(0, 0, 'o', color=lines_color)
         else:
-            X, Y = X/scaling, Y/scaling
-            ax.plot(xc,yc,'o',color=lines_color)
+            X, Y = X / scaling, Y / scaling
+            ax.plot(xc, yc, 'o', color=lines_color)
         # The nucleated domain is always black
-        ax.plot(X,Y,'k',antialiased=True,lw=2)
-        
-        #sw = np.unique(self._switchTimes2D)
-        n_max_switch = np.argwhere(self.sw==self.max_switch)[0][0]
-        for k, switch in enumerate(self.sw[self.n_first:n_max_switch+1]):
+        ax.plot(X, Y, 'k', antialiased=True, lw=2)
+        self.sw = self.domain.sw[:self.domain.max_switch]
+        for k, switch in enumerate(self.sw):
             print(switch)
             q = self._switchTimes2D == switch
             q = q + central_domain
             labeled, n_cluster = mahotas.label(q, self.NNstructure)
-            im, n_cluster = mahotas.labeled.filter_labeled(labeled, 
+            im, n_cluster = mahotas.labeled.filter_labeled(labeled,
                             remove_bordering=remove_bordering, min_size=size_central_domain)
             if n_cluster > 1:
                 print("switch %i has %i clusters" % (switch, n_cluster))
@@ -1769,12 +1687,12 @@ class StackImages:
             #print(ecc)
             y,x = nd.measurements.center_of_mass(central_domain)
             self.bubbles[switch] = central_domain
-            self.centers_of_mass[switch] = (y,x)
-            n_images = self.sw[-1]-self.sw[self.n_first]
-            n = float(switch-self.sw[self.n_first])
+            self.centers_of_mass[switch] = (y, x)
+            n_images = len(self.sw)
+            n = float(switch - self.sw[0])
             clr = getKoreanColors(n, n_images)
             #print(n, clr)
-            clr = tuple([c/255. for c in clr])
+            clr = tuple([c / 255. for c in clr])
             if plot_centers_of_mass and reference is None:
                 ax.plot(x,y,'o',c=clr)
             #plt.plot(x,y,'o')

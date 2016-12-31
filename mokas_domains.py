@@ -5,18 +5,17 @@ import getLogDistributions as gLD
 import matplotlib.pyplot as plt
 import itertools
 import scipy.spatial as spatial
-from scipy.spatial.distance import cdist
 from skimage.morphology import remove_small_holes
 from skimage.draw import line_aa
 
-class Domain:
+class Domains:
     """
-    This class calculates various properties of a domain, 
+    This class calculates various properties of a domain,
     given a map of the switch times as a 2D array (switch2D)
     """
     def __init__(self, switch2D, no_switch_value=-1, NNstructure=None):
         if not NNstructure:
-            self.NNstructure = np.ones((3,3))
+            self.NNstructure = np.ones((3, 3))
         else:
             self.NNstructure = NNstructure
         sw = np.unique(switch2D)
@@ -25,6 +24,7 @@ class Domain:
         self.switched_domain = switch2D >= self.sw[0]
         self.is_single_domain, self.initial_clusters, self.n_initial_clusters \
                 = self._is_single_domain(self.switched_domain, self.NNstructure)
+        self.max_switch = self.max_switch_not_touching_edges()
 
     def _is_single_domain(self, domain, NNstructure):
         im, n_cluster = mahotas.label(domain, NNstructure)
@@ -61,28 +61,44 @@ class Domain:
                 x_j, y_j = q_j.astype(int)
                 # Add a line between the two points
                 rr, cc, val = line_aa(x_i, y_i, x_j, y_j)
-                im[rr,cc] = 1
+                im[rr, cc] = 1
             q = im > 0
         if is_remove_small_holes:
             q = remove_small_holes(q)
-        self.q = q
         im, n_cluster = mahotas.label(~q, self.NNstructure)
         im = mahotas.labeled.remove_bordering(im)
+        if n_cluster > 1:
+            print("There are more clusters than expected: I take the largest")
+            im, n_cluster = mahotas.labeled.relabel(im)
+            size_clusters = mahotas.labeled.labeled_size(im)[1:]
+            index = size_clusters.argmax()
+            #size_central_domain = size_clusters[index]
+            im = im == index + 1
         return im
 
+    def max_switch_not_touching_edges(self):
+        """
+        Calculated the max switch with a fully internal domain 
+        It is used to calculate the initial nucleated domain 
+        """
+        q = np.copy(self.switch2D)
+        rows, cols = q.shape
+        for switch in self.sw[::-1]:
+            dm = (q <= switch) & (q != -1)
+            min_row, max_row, min_col, max_col = mahotas.bbox(dm)
+            if (min_row == 0) or (min_col==0) or (max_row==rows) or (max_col==cols):
+                next
+            else:
+                return switch
 
 if __name__ == "__main__":
     filename = "switch2D_05.pkl"
     with open(filename, 'rb') as f:
         switch2D = pickle.load(f)
-    
-    domain = Domain(switch2D)
+    domain = Domains(switch2D)
     plt.figure()
     plt.imshow(domain.initial_clusters, interpolation='None')
-    print("%i clusters" % domain.n_initial_clusters)
-
     plt.figure()
     initial_domain = domain.get_initial_domain()
-    plt.imshow(initial_domain,interpolation='None')
+    plt.imshow(initial_domain, interpolation='None')
     plt.show()
-
