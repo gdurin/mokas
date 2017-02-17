@@ -76,7 +76,7 @@ class Wires(StackImages):
         find the largest cluster in a image
         """
         im, n_clusters = mahotas.label(im)
-        if n_clusters = 1:
+        if n_clusters == 1:
             return im
         else:
             sizes = mahotas.labeled.labeled_size(im)[1:]
