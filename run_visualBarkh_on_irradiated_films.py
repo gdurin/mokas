@@ -188,16 +188,23 @@ if __name__ == "__main__":
 
             # On Genesis
             # Loading ok, memory allocation problems in doing the filter (600, :, :)
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A"
-            imParameters['pattern'] = "02_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A"
+            #imParameters['pattern'] = "02_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+            # The same on wswall.isi.it
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.116A_3s"
+            #imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"
             # Loading ok, beautiful growth
+            # On Genesis
             #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.232A"
             #imParameters['pattern'] = "02_Irr_800uC_0.232A_MMStack_Pos0.ome.tif"
-
+            # On wswall
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.232A_700ms"
+            imParameters['pattern'] = "02_Irr_16e8He+_0.232A_700ms_MMStack_Pos0.ome.tif"
+            crop_upper_left_pixel, crop_lower_right_pixel = (100,50), (1200,1020)
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
             #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
-            crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
+            #crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
             imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
             imParameters['imCrop'] = None
             #imParameters['pattern'] = "Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif" 
@@ -216,11 +223,11 @@ if __name__ == "__main__":
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
             imParameters['lastIm'] = -1
             #imParameters['filtering'] = 'bilateral'
-            #imParameters['filtering'] = 'gauss_parallel'
-            imParameters['filtering'] = 'gauss'
+            imParameters['filtering'] = 'gauss_parallel'
+            #imParameters['filtering'] = 'gauss'
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
-            threshold = 2
+            threshold = None
             palette = 'coolwarm'
         else:
             print("Check the path!")
@@ -228,7 +235,7 @@ if __name__ == "__main__":
         imParameters['resize_factor'] = None
         print(imParameters['pattern'])
         # Kernel setups: do not touch
-        imParameters['kernel_half_width_of_ones'] = 15
+        imParameters['kernel_half_width_of_ones'] = 10
         #imParameters['kernel_internal_points'] = 0
         #imParameters['kernel_switch_position'] = "end"
         ##############################
@@ -236,7 +243,8 @@ if __name__ == "__main__":
         #A possible improvement is that stackImages returns also the threshold value extracting the information when uploading the images
         imArray = bk.StackImages(**imParameters)
         
-        imArray.showColorImage(threshold, palette=palette, plot_contours=False)
+        imArray.showColorImage(threshold=threshold, palette=palette, plot_contours=True, 
+            erase_small_events_percent=10)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
         #'center_of_mass')
