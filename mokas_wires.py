@@ -1,5 +1,6 @@
 import os, glob
 import configparser
+import numpy as np
 import matplotlib.pyplot as plt
 from visualBarkh import StackImages
 import mahotas
@@ -55,20 +56,24 @@ class Wires(StackImages):
         for i, sw in enumerate(self.switches):
             im = q == sw
             largest_cluster, cluster_size = self._largest_cluster(im)
-            if cluster_size < min_size:
-                self.switches = np.delete(self.switches, i)
-            else:
-                sizes.append(cluster_size)
+            sizes.append(cluster_size)
+        sizes = np.array(sizes)
+        is_sizes_largest = sizes > min_size
+        self.sizes_largest = sizes[is_sizes_largest]
+        self.switches = self.switches[is_sizes_largest]
+                
 
 
     def _lenghts(self, cluster):
         cluster = morph.remove_small_holes(cluster)
         medial_axis = morph.medial_axis(cluster)
+        # ============ Not used (below)
         # Find the corners with the corner_fast method
-        cf = feature.corner_fast(cluster)
+        #cf = feature.corner_fast(cluster)
         # Select the two corners (little clusters) 
         # farthest from the center of mass
-
+        # =========== Not used (above)
+        sk = morph.skeletonize(cluster)
     
 
     def _largest_cluster(self, im):
@@ -77,7 +82,7 @@ class Wires(StackImages):
         """
         im, n_clusters = mahotas.label(im)
         if n_clusters == 1:
-            return im
+            return im, np.sum(im)
         else:
             sizes = mahotas.labeled.labeled_size(im)[1:]
             i = np.argmax(sizes)
