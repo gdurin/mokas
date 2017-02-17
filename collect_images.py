@@ -51,8 +51,8 @@ class Images:
         Image resolution (8 bits default)
     """
     def __init__(self, root_dir, pattern, firstIm=0, lastIm=-1, resolution=16,
-                is_hist_equalization=False, resize_factor=None, crop=None, 
-                filtering=None, sigma=None): 
+                is_hist_equalization=False, crop=None, 
+                rotation=None, filtering=None, sigma=None): 
         """
         initialization 
 
@@ -62,8 +62,9 @@ class Images:
         self.filename = os.path.join(root_dir, pattern)
         self.firstIm = firstIm
         self.lastIm = lastIm
-        self.resize_factor = resize_factor
         self.crop = crop
+        self.rotation = rotation
+        self.is_rotated = False
         self.filtering = filtering
         self.sigma = sigma
         self.mode = self._set_mode()
@@ -171,9 +172,18 @@ class Images:
             print("frames: %i, size: (%i,%i), bit depth: %i, max of gray level %i" % (frames, height, width, bit_depth, max_gray_level))
             tif = TIFF.open(self.filename, mode='r')
             self.images = np.empty((frames, height, width)).astype(self.resolution)
-            for i,image in enumerate(tif.iter_images()):
+            for i, image in enumerate(tif.iter_images()):
+                if self.rotation:
+                    image = nd.interpolation.rotate(image, self.rotation)
                 self.images[i] = image
+            if self.rotation:
+                self.is_rotated = True
             tif.close()
+        # Rotate if not done
+        if self.rotation and not self.is_rotated:
+            for i, image in enumerate(self.images):
+                self.images[i] = nd.interpolation.rotate(image, self.rotation, reshape=False)
+            self.is_rotated = True
         try:
             assert self.images.shape == (frames, height, width)
             print("TIFF Images loaded... ", self.images.shape)
@@ -232,11 +242,6 @@ class Images:
         [(col_min,row_min),(col_max,row_max)] = crop_limits
         #xmin, xmax, ymin, ymax = crop_limits
         self.images = self.images[:, row_min : row_max, col_min : col_max]
-
-    def _image_resize(self, resize_factor):
-        print("Resize is not available in tiff images, sorry")
-        print("Do you really need it?")
-        return None
 
     def _image_filter(self, image):
         if self.filtering == 'bilateral':
@@ -326,8 +331,7 @@ class Images:
             print("Original image size: ", self.images.shape)
             self._image_crop(self.crop)
             print("Cropped image size: ", self.images.shape)
-        if self.resize_factor:
-            self._image_resize(self.resize_factor)
+
         # if self.filtering:
         #     print("Filtering with %s..." % self.filtering)
         #     self._image_filter(self.filtering, self.sigma)
@@ -339,14 +343,14 @@ class Images:
             print("Len of imageNumbers: %i") % len(self.imageNumbers)
         return self.images, self.imageNumbers
 
-def images2array(root_dir, pattern, firstIm=0, lastIm=-1, resize_factor=None, crop=None, 
+def images2array(root_dir, pattern, firstIm=0, lastIm=-1, crop=None, rotation=None,
     filtering=None, sigma=None, subtract=None):
     """
     subtract: int or None
         Subtract image # as background
     """
     im = Images(root_dir=root_dir, pattern=pattern, firstIm=firstIm, lastIm=lastIm, 
-        resize_factor=resize_factor, crop=crop, filtering=filtering, sigma=sigma)
+        crop=crop, rotation=rotation, filtering=filtering, sigma=sigma)
     images, imageNumbers = im.collector()
     if subtract is not None:
         # TODO: fix the way the gray level is renormalized
@@ -367,12 +371,14 @@ if __name__ == "__main__":
     # The file below contains 800 frames
     root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_400uC/01_Irr_400uC_0.1A"
     pattern = "01_Irr_400uC_0.1A_MMStack_Pos0.ome.tif"
+    root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/nonirrad wire/01_nonirradiatedwires_0.20A_10fps"
+    pattern = "01_nonirradiatedwires_0.20A_10fps_MMStack_Pos0.ome.tif"
     #root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"
     im_crop = None  
     #im_crop = (876,1117,0,1040)
-    filtering = 'gauss_parallel'
+    filtering = 'gauss'
     #filtering = None
     sigma = 2
     out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=None)

@@ -152,7 +152,8 @@ class StackImages:
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
-                 erase_small_events=None):
+                 erase_small_events=None,
+                 rotation=None):
         """
         Initialized the class
         """
@@ -203,8 +204,7 @@ class StackImages:
         #self.Array = self.collect_images(pattern, firstIm, lastIm, resize_factor, imCrop, 
         #    filtering, sigma)
         self.Array, self.imageNumbers = \
-        collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, resize_factor, imCrop, 
-            filtering, sigma, subtract=subtract)
+        collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, imCrop, rotation, filtering, sigma, subtract=subtract)
 
         ##############################################################################
         self.shape = self.Array.shape
@@ -610,8 +610,6 @@ class StackImages:
 
         Parameters:
         ----------------
-        self._threshold : int
-            The miminum value of the gray level change at the switch
         isFirstSwitchZero : bool
             Put the first switch equal to zero, useful to set the colors
             in a long sequence of images where the first avalanche
@@ -624,8 +622,9 @@ class StackImages:
         ### 
         #get sigma from hist of images and use it as threshold
         ###
-        self._threshold = int(np.std(self.Array.flatten())*0.1)
-        print("estimated threshold = %d"%self._threshold)
+        if self._threshold is None:
+            self._threshold = int(np.std(self.Array.flatten())*0.1)
+            print("estimated threshold = %d"%self._threshold)
 
         self.isPixelSwitched = (self._switchSteps >= self._threshold) & (self._switchTimes > self.kernel_half_width_of_ones)
         maskedSwitchTimes = ma.array(self._switchTimes, mask = ~self.isPixelSwitched)

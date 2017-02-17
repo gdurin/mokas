@@ -4,7 +4,7 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from visualBarkh import StackImages
+import mokas_wires as mkwires
 from mokas_colors import get_colors
 
 
@@ -12,7 +12,8 @@ p2p = 3 # Pixel to pixel (linear) distance for cluster detection
 NN = 2*p2p + 1
 structure = np.ones((NN,NN))
 
-class Wires:
+
+class RunWires:
     def __init__(self, rootDir, subdir_pattern, filename_suffix, imParameters,
                 threshold, experiments=None):
         self.rootDir = rootDir
@@ -39,13 +40,13 @@ class Wires:
         self.figs = []
         self.imArray_collector = {}
         print("Preparing plots",end="")
-        self.fig1, self.axs1 = plt.subplots(1,self.n_experiments,sharex=True, sharey=True) # ColorImages of the wires
+        self.fig1, self.axs1 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # ColorImages of the wires
         self.figs.append(self.fig1)
         print(".",end="")
-        self.fig2, self.axs2 = plt.subplots(self.n_experiments,1) # Histograms
+        self.fig2, self.axs2 = plt.subplots(self.n_experiments, 1, sharey=True) # Histograms
         self.figs.append(self.fig2)
         print(".",end="")
-        self.fig3, self.axs3 = plt.subplots(1,self.n_experiments,sharex=True, sharey=True) # Contours
+        self.fig3, self.axs3 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # Contours
         self.figs.append(self.fig3)
         
 
@@ -61,19 +62,20 @@ class Wires:
             filename = self.filenames[experiment]
             self.imParameters['pattern'] = filename
             print(experiment, filename)
-            imArray = StackImages(**self.imParameters)
+            #imArray = StackImages(**self.imParameters)
+            imArray = mkwires.Wires(**self.imParameters)
             self.imArray_collector[trial] = imArray
-            imArray.useKernel = 'step'
-            imArray.kernelSign = -1
-            imArray.boundary = None
-            imArray.structure = structure
+            #imArray.useKernel = 'step'
+            #imArray.kernelSign = -1
+            #imArray.boundary = None
+            #imArray.structure = structure
             imArray.showColorImage(self.threshold,palette=pColor,plot_contours=False,plotHist=None,
                                    fig=self.fig1,ax=self.axs1[n],title=title,noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2,ax=self.axs2[n],title=title,ylabel=None)
-            #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
-                                     #invert_y_axis=False, plot_rays=False,
-                                     #fig=self.fig3, ax=self.axs3[n], title=title)
+            imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
+                                     invert_y_axis=False, plot_rays=False,
+                                     fig=self.fig3, ax=self.axs3[n], title=title)
         # Out of the loop
         for fig in self.figs:
             fig.suptitle(self.rootDir,fontsize=30)
@@ -102,30 +104,33 @@ if __name__ == "__main__":
         imParameters['sigma'] = 0.5
         imParameters['resize_factor'] = None
         threshold = 30
+
     elif choice == 'non_irr':
         set_current = ["0.20","0.22","0.24"][0]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/nonirrad wire/"
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
+        wire_ini = mkwires.Wires_ini(rootDir, 2)
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
-        #imParameters['imCrop'] = (0,1392,0,1040)
-        #imParameters['imCrop'] = (1000,1392,100,1040)
-        crop_upper_left_pixel = (1000,100)
-        crop_lower_right_pixel = (1392,1040)
-        imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
-        #imParameters['imCrop'] = None
-        #imParameters['imCrop'] = (876,1117,0,1040)
         filename_suffix = "_MMStack_Pos0.ome.tif"
-        #imParameters['pattern'] = "01_irradiatedwires_%sA_10fps_MMStack_Pos0.ome.tif" % set_current
-        imParameters['firstIm'] = 1
-        imParameters['lastIm'] = 300
-        imParameters['filtering'] = 'gauss'
-        #imParameters['filtering'] = None
-        imParameters['sigma'] = 1.
-        imParameters['resize_factor'] = None
-        threshold = 20
-        wires = Wires(rootDir, subdir_pattern, filename_suffix, imParameters,threshold, experiments=range(6))
+
+        imParameters = wire_ini.imParameters
+        experiments = wire_ini.experiments
+        # crop_upper_left_pixel = (158,91)
+        # crop_lower_right_pixel = (360,1040)     
+        # imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+        
+        # imParameters['firstIm'] = 1
+        # imParameters['lastIm'] = 300
+        # imParameters['filtering'] = 'gauss'
+        # #imParameters['filtering'] = None
+        # imParameters['sigma'] = 1.
+        # imParameters['resize_factor'] = None
+        threshold = 10
+        #experiments = [0,1,2,3,5,6,7,8]
+        #experiments = [0,1,2]
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=experiments)
         wires.plot_results()
     
     elif choice == 'irr':
@@ -146,9 +151,8 @@ if __name__ == "__main__":
         imParameters['filtering'] = 'gauss'
         #imParameters['filtering'] = None
         imParameters['sigma'] = 1.5
-        imParameters['resize_factor'] = None
         threshold = 10
-        wires = Wires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=range(2))
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=range(2))
         wires.plot_results()
     else:
         print("Check the path!")

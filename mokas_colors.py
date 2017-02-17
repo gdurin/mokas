@@ -69,7 +69,7 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
     n: int
         n. of points 
     """
-    print("You are using the {} palette".format(palette))
+    #print("You are using the {} palette".format(palette))
     if type(palette) is not type('str'):
         return palette
 
