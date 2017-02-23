@@ -122,8 +122,6 @@ class StackImages:
     imCrop : 4-element tuple
        Crop the image
 
-    erase_small_events : int [None, or 0-100]
-        erase events which smaller than a % of the largest cluster (i.e. the total motion of the wall)
     """
 
     def __init__(self, subDirs, pattern, resize_factor=None,
@@ -136,7 +134,6 @@ class StackImages:
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
-                 erase_small_events=None,
                  rotation=None):
         """
         Initialized the class
@@ -165,7 +162,6 @@ class StackImages:
         self.is_find_contours = False
         self.isTwoImages = False
         self.is_minmax_switches = False
-        self.erase_small_events = erase_small_events
         self.pattern = pattern
         #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         self.NNstructure = np.ones((3,3))
@@ -640,8 +636,8 @@ class StackImages:
         self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
         self._switchTimes2D_original = np.copy(self._switchTimes2D)
         # Now check if getting rid of the wrong switches 
-        if self.erase_small_events:
-            percentage = self.erase_small_events/100.
+        if erase_small_events_percent:
+            percentage = erase_small_events_percent/100.
             # This gets rid of the wrong switches
             # Using the cluster max sizes for the switches
             # It redefines self._switchTimes2D
@@ -1825,7 +1821,7 @@ class StackImages:
             x_points = np.append(x, x_points)
             y_points = np.append(y, y_points)
         n_images, rows, cols = self.shape
-        bins = (np.arange(0,cols,.5), np.arange(0,rows,.5))
+        bins = (np.arange(0,rows,.5), np.arange(0,cols,.5))
         waiting_times_hist, xedges, yedges = np.histogram2d(x_points, y_points, bins=bins)
         wt_masked = np.ma.masked_where(waiting_times_hist==0, waiting_times_hist)
         if is_plot:
@@ -1834,7 +1830,7 @@ class StackImages:
             else:
                 norm = 'None'
             fig1 = plt.figure()
-            plt.imshow(waiting_times_hist,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+            plt.imshow(waiting_times_hist,extent=[yedges[-1], yedges[0], xedges[0], xedges[-1]], 
                 norm=norm, interpolation='nearest')
             fig2 = plt.figure()
             plt.imshow(wt_masked,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 

@@ -14,24 +14,25 @@ structure = np.ones((NN,NN))
 
 
 class RunWires:
-    def __init__(self, rootDir, subdir_pattern, filename_suffix, imParameters,
-                threshold, experiments=None):
+    def __init__(self, rootDir, subdir_pattern, filename_suffix):
         self.rootDir = rootDir
         self.sub_dirs = sorted(glob.glob1(rootDir, subdir_pattern))
         self.filenames = [d+filename_suffix for d in self.sub_dirs]
-        if experiments is None:
+        wire_ini = mkwires.Wires_ini(rootDir, 2)
+        self.imParameters = wire_ini.imParameters
+        self.experiments = wire_ini.experiments
+        self.threshold = wire_ini.threshold
+        self.motion = wire_ini.motion
+        if self.experiments is None:
             self.n_experiments = len(self.sub_dirs)
             self.experiments = range(self.sub_dirs)
         else:
-            self.n_experiments = len(experiments)
-            self.experiments = experiments
-        self.imParameters = imParameters
-        self.threshold = threshold
+            self.n_experiments = len(self.experiments)
         print(self.filenames[0])
         self.full_title = ", ".join(self.filenames[0].split("_")[1:4])
        
 
-    def plot_results(self):
+    def plot_results(self, plot_contours=True):
         """
         Plot the different images for creep in wires
         """
@@ -39,14 +40,11 @@ class RunWires:
         plt.close("all")
         self.figs = []
         self.imArray_collector = {}
-        print("Preparing plots",end="")
         self.fig1, self.axs1 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # ColorImages of the wires
         self.figs.append(self.fig1)
-        print(".",end="")
         self.fig2, self.axs2 = plt.subplots(self.n_experiments, 1, sharey=True) # Histograms
         self.figs.append(self.fig2)
-        print(".",end="")
-        self.fig3, self.axs3 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # Contours
+        self.fig3, self.axs3 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # Pinning Centers
         self.figs.append(self.fig3)
         
 
@@ -63,19 +61,27 @@ class RunWires:
             self.imParameters['pattern'] = filename
             print(experiment, filename)
             #imArray = StackImages(**self.imParameters)
-            imArray = mkwires.Wires(**self.imParameters)
+            imArray = mkwires.Wires(self.motion, **self.imParameters)
             self.imArray_collector[trial] = imArray
             #imArray.useKernel = 'step'
             #imArray.kernelSign = -1
             #imArray.boundary = None
             #imArray.structure = structure
-            imArray.showColorImage(self.threshold,palette=pColor,plot_contours=False,plotHist=None,
+            imArray.showColorImage(self.threshold,palette=pColor,plot_contours=True,plotHist=None,
                                    fig=self.fig1,ax=self.axs1[n],title=title,noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2,ax=self.axs2[n],title=title,ylabel=None)
-            imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
-                                     invert_y_axis=False, plot_rays=False,
-                                     fig=self.fig3, ax=self.axs3[n], title=title)
+            # imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
+            #                          invert_y_axis=False, plot_rays=False,
+            #                          fig=self.fig3, ax=self.axs3[n], title=title)
+            imArray.get_stats_prop()
+            self.axs3[n].imshow(imArray.stats_prop['image_corners'])
+            if plot_contours:
+                for switch in imArray.contours:
+                    cnts = imArray.contours[switch]
+                    X,Y = cnts[:,1], cnts[:,0]
+                    self.axs3[n].plot(X,Y,c='w',antialiased=True,lw=1)
+
         # Out of the loop
         for fig in self.figs:
             fig.suptitle(self.rootDir,fontsize=30)
@@ -111,12 +117,9 @@ if __name__ == "__main__":
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
-        wire_ini = mkwires.Wires_ini(rootDir, 2)
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
         filename_suffix = "_MMStack_Pos0.ome.tif"
 
-        imParameters = wire_ini.imParameters
-        experiments = wire_ini.experiments
         # crop_upper_left_pixel = (158,91)
         # crop_lower_right_pixel = (360,1040)     
         # imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
@@ -127,10 +130,10 @@ if __name__ == "__main__":
         # #imParameters['filtering'] = None
         # imParameters['sigma'] = 1.
         # imParameters['resize_factor'] = None
-        threshold = 10
+        #threshold = 10
         #experiments = [0,1,2,3,5,6,7,8]
         #experiments = [0,1,2]
-        wires = RunWires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=experiments)
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix)
         wires.plot_results()
     
     elif choice == 'irr':

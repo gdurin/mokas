@@ -223,7 +223,7 @@ if __name__ == "__main__":
             imParameters['firstIm'] = 0 # Use python convention: start from zero!
             imParameters['lastIm'] = -1
             #imParameters['filtering'] = 'bilateral'
-            imParameters['filtering'] = 'gauss_parallel'
+            imParameters['filtering'] = 'gauss'
             #imParameters['filtering'] = 'gauss'
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         #A possible improvement is that stackImages returns also the threshold value extracting the information when uploading the images
         imArray = bk.StackImages(**imParameters)
         
-        imArray.showColorImage(threshold=threshold, palette=palette, plot_contours=True, 
+        imArray.showColorImage(threshold=threshold, palette=palette, plot_contours=False, 
             erase_small_events_percent=10)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
