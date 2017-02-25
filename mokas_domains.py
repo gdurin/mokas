@@ -36,6 +36,12 @@ class Domains:
             return True, im, 1
 
     def get_initial_domain(self, is_remove_small_holes=True):
+        """
+        The detection of the initial domain has a lot of problems
+        We need to differenciate between:
+        1. a large domain with a few small clusters
+        2. similar domains not connected
+        """
         if self.is_single_domain:
             q = np.copy(self.switched_domain)
         else:

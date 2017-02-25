@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import pickle
 import numpy as np
 import mahotas
@@ -69,7 +69,7 @@ class Events:
             print("Data collected")
             self.switch2D = switch2D
         elif isinstance(switch2D, str):
-            print("File loading")
+            print("File %s loading" % switch2D)
             with open(switch2D, 'rb') as f:
                 self.switch2D = pickle.load(f)
             print("Done")
@@ -153,51 +153,71 @@ class Events:
         average_avalanche_sizes = np.array(average_avalanche_sizes)
         return average_avalanche_sizes, average_avalanche_durations
 
-    def plot_maps(self, cmap='pastel'):
+    def plot_maps(self, cmap='pastel', title=None):
         if cmap == 'pastel':
             clrs = (np.random.rand(256,3) + [1,1,1])/2
             clrs[0] = [0,0,0]
             cmap = mpl.colors.ListedColormap(clrs)
 
-            fig1, axs1 = plt.subplots(1, 2, sharex=True, sharey=True) # ColorImages of events and sizes
-            axs1[0].imshow(self.switch2D, cmap=cmap)
-            axs1[1].imshow(self.avalanche2D, cmap=cmap)
-            for i in self.avalanche_switches:
-                cluster = self.avalanche2D==i
-                cnts = measure.find_contours(cluster, 0.5)
-                for cnt in cnts:
-                    X,Y = cnt[:,1], cnt[:,0]
-                    for ax in axs1:
-                        ax.plot(X, Y, c='k', antialiased=True, lw=1)
+        fig1, axs1 = plt.subplots(1, 2, sharex=True, sharey=True) # ColorImages of events and sizes
+        axs1[0].imshow(self.switch2D, cmap=cmap)
+        axs1[1].imshow(self.avalanche2D, cmap=cmap)
+        for i in self.avalanche_switches:
+            cluster = self.avalanche2D==i
+            cnts = measure.find_contours(cluster, 0.5)
+            for cnt in cnts:
+                X,Y = cnt[:,1], cnt[:,0]
+                for ax in axs1:
+                    ax.plot(X, Y, c='k', antialiased=True, lw=1)
+        fig1.suptitle(title,fontsize=30)
 
 
 class PlotEvents:
-    def __init__(self, fig=None, axs=None):
-        self.fig, self.axs = plt.subplots(1, 2) # Distributions of events and avalanches
+    def __init__(self, fig=None, axs=None, title=None):
+        self.title = title
 
     def size_distributions(self, events_sizes, avalanche_sizes):
-        
+        fig, axs = plt.subplots(1, 1) # Distributions of events and avalanches
+        fig.suptitle(self.title,fontsize=30)
         # Calculate and plot the distributions of clusters and avalanches
         for sizes, label in zip([events_sizes, avalanche_sizes], ['events', 'avalanches']):
             x, y, yerr = gLD.logDistribution(sizes, log_step=0.1, 
                                    first_point=1., normed=True)
             # Plots of the distributions
-            self.axs[0].loglog(x, y,'o', label=label)
-            self.axs[0].errorbar(x, y, yerr, fmt="none")
+            axs.loglog(x, y,'o', label=label)
+            axs.errorbar(x, y, yerr, fmt=None)
             if label == 'events':
-                self.axs[0].loglog(x, 0.14 * x**-1.17 * np.exp(-x/50),'-', label=r'S^{-1.17} exp(-S/50)')
+                axs.loglog(x, 0.25 * x**-1.17 * np.exp(-x/100),'-', label=r'S^{-1.17} exp(-S/50)')
             elif label == 'avalanches':
-                self.axs[0].loglog(x, 0.14 * x**-1.17 * np.exp(-x/500),'-', label=r'S^{-1.17} exp(-S/50)')
-        self.axs[0].legend()
-        self.axs[0].grid(True)
+                axs.loglog(x, 0.25 * x**-1.17,'-', label=r'S^{-1.17} exp(-S/50)')
+        axs.legend()
+        axs.grid(True)
 
     def average_size_vs_duration_of_avalanches(self, durations, sizes):
-        self.axs[1].loglog(durations, sizes,'o')
-        self.axs[1].grid(True)
+        fig, ax = plt.subplots(1, 1)
+        if durations[0] == 0:
+            durations = durations[1:]
+            sizes = sizes[1:]
+
+        ax.loglog(durations, sizes,'o')
+        ax.set_xlabel("Duration (frames)")
+        ax.set_ylabel("Sizes (pixels area)")
+        ax.grid(True)
+        log_sizes = np.log10(sizes)
+        log_durations = np.log10(durations)
+        res = np.polyfit(log_durations, log_sizes, 1)
+        gamma = res[0]
+        c0 = 10**res[1]
+        ax.loglog(durations, c0*durations**gamma, label=str(gamma))
+        plt.legend()
         plt.show()
     
 
 if __name__ == "__main__":
+    try:
+        mtype = sys.argv[1]
+    except:
+        mtype = 'Irr16'
     NNstructure = np.ones((3,3))
     qq = np.array([[13, 13, 13,  8,  8,  3],
        [12, 14,  8,  6,  3,  3],
@@ -212,11 +232,32 @@ if __name__ == "__main__":
        [15,  9, 15,  2, -1, -1],
        [15, 15,  2, -1, -1, -1],
        [-1, 2, -1, -1, -1, -1]], dtype=np.int32)
-    filename = "switch2D_05.pkl"
-    filename = qq2
-    events = Events(filename, NNstructure=NNstructure)
-    events.get_events_and_avalanches()
-    events.plot_maps()
-    plotEvents = PlotEvents()
-    plotEvents.size_distributions(events.events_sizes, events.avalanche_sizes)
-    plotEvents.average_size_vs_duration_of_avalanches(events.average_avalanche_durations, events.average_avalanche_sizes)
+    filenamepkl = "switchTimes2D.pkl"
+    #filename = "switch2D_test.pkl"
+    if mtype == "NonIrr":
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr"
+        subDir = "NonIrr_0.095A_3s"
+        experiments = (1,2,4)
+    elif mtype == "Irr16":
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/"
+        subDir = "Irr_16e8He+_0.116A_3s"
+        experiments = (2,3,4,5,6,7,8,9,10)
+    events_sizes = np.array([])
+    avalanche_sizes = np.array([])
+    avalanche_durations = np.array([])
+    
+    for i in experiments:
+        sub_Dir = "%s_%s" % (str(i).rjust(2,"0"), subDir)
+        filename = os.path.join(rootDir, sub_Dir, filenamepkl)
+        events = Events(filename, NNstructure=NNstructure)
+        events.get_events_and_avalanches()
+        events.plot_maps(title=sub_Dir)
+        events_sizes = np.concatenate((events_sizes, events.events_sizes))
+        avalanche_sizes = np.concatenate((avalanche_sizes, events.avalanche_sizes))
+        avalanche_durations = np.concatenate((avalanche_durations, events.avalanche_durations))
+
+    average_avalanche_sizes, average_avalanche_durations = events._get_average_avalanches(avalanche_sizes, avalanche_durations)
+    title = "%s%s" % (str(experiments), subDir)
+    plotEvents = PlotEvents(title=title)
+    plotEvents.size_distributions(events_sizes, events.avalanche_sizes)
+    plotEvents.average_size_vs_duration_of_avalanches(average_avalanche_durations, average_avalanche_sizes)

@@ -173,17 +173,10 @@ class Images:
             tif = TIFF.open(self.filename, mode='r')
             self.images = np.empty((frames, height, width)).astype(self.resolution)
             for i, image in enumerate(tif.iter_images()):
-                if self.rotation:
-                    image = nd.interpolation.rotate(image, self.rotation)
                 self.images[i] = image
             if self.rotation:
                 self.is_rotated = True
             tif.close()
-        # Rotate if not done
-        if self.rotation and not self.is_rotated:
-            for i, image in enumerate(self.images):
-                self.images[i] = nd.interpolation.rotate(image, self.rotation, reshape=False)
-            self.is_rotated = True
         try:
             assert self.images.shape == (frames, height, width)
             print("TIFF Images loaded... ", self.images.shape)
@@ -242,6 +235,21 @@ class Images:
         [(col_min,row_min),(col_max,row_max)] = crop_limits
         #xmin, xmax, ymin, ymax = crop_limits
         self.images = self.images[:, row_min : row_max, col_min : col_max]
+
+    def _image_rotate(self, rotation):
+        # Rotate if not done
+        print("Rotating...")
+        if self.rotation == 90:
+            n, rows, cols = self.images.shape
+            images = np.zeros((n, cols, rows))
+        else:
+            images = np.zeros_like(self.images)
+        for n, image in enumerate(self.images):
+            if self.rotation == 90:
+                images[n] = np.rot90(image)
+            else:
+                images[n] = nd.interpolation.rotate(image, self.rotation)
+        self.images = images
 
     def _image_filter(self, image):
         if self.filtering == 'bilateral':
@@ -331,6 +339,9 @@ class Images:
             print("Original image size: ", self.images.shape)
             self._image_crop(self.crop)
             print("Cropped image size: ", self.images.shape)
+        if self.rotation:
+            print(self.rotation)
+            self._image_rotate(self.rotation)
 
         # if self.filtering:
         #     print("Filtering with %s..." % self.filtering)

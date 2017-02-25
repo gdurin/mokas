@@ -1711,16 +1711,17 @@ class StackImages:
                 self.im = im
                 print("switch: {}, n_cluster: {}".format(switch,n_cluster))
                 break
-            if k==0:
-                ecc = properties.eccentricity
-            else:
-                # TODO: check if the eccentricity gets too different
-                # Need to check when also grow horizontally
-                if ecc/properties.eccentricity > 1.5:
-                    print("there is a problem with the contour, please check it")
-                    break
-                else:
-                    ecc = properties.eccentricity
+            # Eccentricity to be checked
+            # if k==0:
+            #     ecc = properties.eccentricity
+            # else:
+            #     # TODO: check if the eccentricity gets too different
+            #     # Need to check when also grow horizontally
+            #     if ecc/properties.eccentricity > 1.5:
+            #         print("there is a problem with the contour, please check it")
+            #         ecc = None
+            #     else:
+            #         ecc = properties.eccentricity
             #print(ecc)
             y,x = nd.measurements.center_of_mass(central_domain)
             self.bubbles[switch] = central_domain

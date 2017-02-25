@@ -140,9 +140,9 @@ def test(switch2D, is_plot=False, set_init_time=True):
             axs2[0].loglog(x, y,'o', label=label)
             axs2[0].errorbar(x, y, yerr, fmt="none")
             if label == 'events':
-                axs2[0].loglog(x, 0.14 * x**-1.17 * np.exp(-x/50),'-', label=r'S^{-1.17} exp(-S/50)')
+                axs2[0].loglog(x, 0.4 * x**-1.17 * np.exp(-x/50),'-', label=r'S^{-1.17} exp(-S/50)')
             elif label == 'avalanches':
-                axs2[0].loglog(x, 0.14 * x**-1.17 * np.exp(-x/500),'-', label=r'S^{-1.17} exp(-S/50)')
+                axs2[0].loglog(x, 0.4 * x**-1.17 * np.exp(-x/500),'-', label=r'S^{-1.17}')
         axs2[0].legend()
         axs2[0].grid(True)
 

@@ -17,6 +17,8 @@ class Wires_ini(object):
         filename = os.path.join(filepath, "wires.ini")
         if not os.path.isfile(filename):
             print("Please, prepare a wires.ini file")
+        else:
+            print(filename)
         self.config.read(filename)
         self.default = self.config['DEFAULT']
         self.n_wires = int(self.default['n_wires'])
@@ -53,6 +55,11 @@ class Wires(StackImages):
             self.ref_point = (0, cols//2)
         elif motion == 'upward':
             self.ref_point = (rows, cols//2)
+        elif motion == 'leftward':
+            self.ref_point = (rows//2, cols)
+        elif motion == 'rightward':
+            self.ref_point = (rows//2, 0)
+
 
     @property
     def switches(self): 
@@ -74,28 +81,31 @@ class Wires(StackImages):
         lenghts_final = []
         curvatures_final = []
         sws = []
+        #image_corners = np.zeros_like(self._switchTimes2D).astype('bool')
         for i, sw in enumerate(self.switches):
+            #print(i, sw)
             im = self._switchTimes2D == sw
             largest_cluster, cluster_size = self._largest_cluster(im)
             if cluster_size >= min_size:
-                sizes.append(cluster_size)
                 l_initial, l_final, im_corners = self._get_upper_and_lower_contour(largest_cluster, is_largest_size_only=False)
+                if len(l_initial) == 0 or len(l_final) == 0: # in case of errors
+                    print("Error for switch: %i, iteration %i" % (sw, i))
+                    next
                 length, curvature = self._get_lenght_and_curvature(l_initial)
-                lenghts_initial.append(length)
-                length, curvature = self._get_lenght_and_curvature(l_final)
-                lenghts_final.append(length)
-                curvatures_final.append(curvature)
-                sws.append(sw)
-                try: 
-                    image_corners += i * im_corners.astype('bool')
-                except UnboundLocalError:
-                    image_corners = i * im_corners.astype('bool')
+                if length is not None:
+                    lenghts_initial.append(length)
+                    length, curvature = self._get_lenght_and_curvature(l_final)
+                    lenghts_final.append(length)
+                    curvatures_final.append(curvature)
+                    sws.append(sw)
+                    sizes.append(cluster_size)
+                #image_corners = image_corners + i * im_corners.astype('bool')
         self.stats_prop['sizes'] = np.array(sizes)
         self.stats_prop['lenghts_initial'] = np.array(lenghts_initial)
         self.stats_prop['lenghts_final'] = np.array(lenghts_final)
         self.stats_prop['curvatures_initial'] = np.array(curvatures_initial)
         self.stats_prop['curvatures_final'] = np.array(curvatures_final)
-        self.stats_prop['image_corners'] = image_corners
+        #self.stats_prop['image_corners'] = image_corners
         self.switches_above_min_size = np.array(sws)
         print("Done.")
 
@@ -105,9 +115,12 @@ class Wires(StackImages):
         Meausure the length of a contour line
         in pixel units
         """
-        x, y = line[:,1], line[:,0]
-        lenght = np.sum(((x[1:]-x[:-1])**2 + (y[1:]-y[:-1])**2)**0.5)
-        curvature, b, c = np.polyfit(x, y, 2)
+        try:
+            x, y = line[:,1], line[:,0]
+            lenght = np.sum(((x[1:]-x[:-1])**2 + (y[1:]-y[:-1])**2)**0.5)
+            curvature, b, c = np.polyfit(x, y, 2)
+        except TypeError:
+            return None, None
         return lenght, -curvature
 
     def _find_corners(self, cluster, n_fast=12, threshold_fast=0.1, method='farthest'):
@@ -121,10 +134,13 @@ class Wires(StackImages):
         # Find the corners with the corner_fast method
         n_clusters = 0
         while n_clusters < 2:
-            cf = feature.corner_fast(cluster, n_fast, threshold_fast)
-            # Now find the clusters associated to them
-            im, n_clusters = mahotas.label(cf)
-            n_fast -= 1
+            try:
+                cf = feature.corner_fast(cluster, n_fast, threshold_fast)
+                # Now find the clusters associated to them
+                im, n_clusters = mahotas.label(cf)
+                n_fast -= 1
+            except OverflowError:
+                return False, False
         # It is better to get the two corners
         if n_clusters > 2:
             if method == 'largest':
@@ -208,6 +224,8 @@ class Wires(StackImages):
         while not success:
             im_corners, success = self._find_corners(cluster, n_fast, threshold_fast)
             n_fast -= 1
+            if not success and im_corners == False:
+                return [], [], None
         corners_index = []
         for i in range(2):
             # Find the contour
@@ -219,6 +237,8 @@ class Wires(StackImages):
             # matching_points = cnt_corner_2_string[is_matching_points]
             is_matching_points = np.in1d(cnt_cluster_2_string, cnt_corner_2_string)
             matching_points = cnt_cluster_2_string[is_matching_points]
+            if len(matching_points) == 0:
+                return [], [], None
             index_matching_point = len(matching_points) // 2
             # Get the string of the cornet and find it in the cluster contour
             corner_string = matching_points[index_matching_point]
@@ -277,7 +297,6 @@ class Wires(StackImages):
             self.contours[switch] = cnts
             X,Y = cnts[:,1], cnts[:,0]
             ax.plot(X,Y,c='k',antialiased=True,lw=1)
-        #print("Sorry, not yet implemented")
         self.is_find_contours = True
         if invert_y_axis:
             ax.invert_yaxis()

@@ -14,15 +14,22 @@ structure = np.ones((NN,NN))
 
 
 class RunWires:
-    def __init__(self, rootDir, subdir_pattern, filename_suffix):
+    def __init__(self, rootDir, subdir_pattern, filename_suffix, n_wire=1,
+        erase_small_events_percent=None):
         self.rootDir = rootDir
-        self.sub_dirs = sorted(glob.glob1(rootDir, subdir_pattern))
-        self.filenames = [d+filename_suffix for d in self.sub_dirs]
-        wire_ini = mkwires.Wires_ini(rootDir, 2)
+        # Get the initial parameters
+        wire_ini = mkwires.Wires_ini(rootDir, n_wire)
         self.imParameters = wire_ini.imParameters
         self.experiments = wire_ini.experiments
         self.threshold = wire_ini.threshold
         self.motion = wire_ini.motion
+        self.erase_small_events_percent = erase_small_events_percent
+        # Get the directories based on the pattern
+        sub_dirs = sorted(glob.glob1(rootDir, subdir_pattern))
+        sdirs = [subdir_pattern.replace("*", str(i)) for i in self.experiments]
+        self.sub_dirs = [sd for sd in sdirs if sd in sub_dirs]
+        self.filenames = [d+filename_suffix for d in self.sub_dirs]
+        print("There are %i files to analyse on the wire %i " % (len(self.filenames), n_wire))
         if self.experiments is None:
             self.n_experiments = len(self.sub_dirs)
             self.experiments = range(self.sub_dirs)
@@ -40,52 +47,94 @@ class RunWires:
         plt.close("all")
         self.figs = []
         self.imArray_collector = {}
-        self.fig1, self.axs1 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # ColorImages of the wires
+        if self.motion in ['leftward', 'rightward']:
+            rows1, cols1 = self.n_experiments, 1
+        elif self.motion in ['downward', 'upward']:
+            rows1, cols1 = 1, self.n_experiments
+        self.fig1, self.axs1 = plt.subplots(rows1, cols1, sharex=True, sharey=True) # ColorImages of the wires
         self.figs.append(self.fig1)
         self.fig2, self.axs2 = plt.subplots(self.n_experiments, 1, sharey=True) # Histograms
         self.figs.append(self.fig2)
-        self.fig3, self.axs3 = plt.subplots(1, self.n_experiments, sharex=True, sharey=True) # Pinning Centers
+        self.fig3, self.axs3 = plt.subplots(rows1, cols1, sharex=True, sharey=True) # Pinning Centers
         self.figs.append(self.fig3)
-        
+        self.fig4, self.axs4 = plt.subplots(1, 2, sharex=True, sharey=True) # Sizes vs lenghts
+        self.figs.append(self.fig4)
 
         #for n in range(self.n_experiments):
         for n,experiment in enumerate(self.experiments):
-            if n == 0:
-                nImages = ((self.imParameters['lastIm'] - self.imParameters['firstIm'])*2)
-                pColor = get_colors(nImages,'pastel',norm=True)
-            sub_dir = self.sub_dirs[experiment]
-            trial = sub_dir[:2]
-            title = trial
+            sub_dir = self.sub_dirs[n]
+            #trial = sub_dir[:2]
+            title = str(experiment).rjust(2, "0")
             self.imParameters['subDirs'] = [self.rootDir, sub_dir, "", "", ""]
-            filename = self.filenames[experiment]
+            filename = self.filenames[n]
             self.imParameters['pattern'] = filename
             print(experiment, filename)
             #imArray = StackImages(**self.imParameters)
             imArray = mkwires.Wires(self.motion, **self.imParameters)
-            self.imArray_collector[trial] = imArray
+            if n == 0:
+                nImages, rows, cols = imArray.shape
+                pColor = get_colors(nImages,'pastel',norm=True)
+            self.imArray_collector[experiment] = imArray
             #imArray.useKernel = 'step'
             #imArray.kernelSign = -1
             #imArray.boundary = None
             #imArray.structure = structure
-            imArray.showColorImage(self.threshold,palette=pColor,plot_contours=True,plotHist=None,
-                                   fig=self.fig1,ax=self.axs1[n],title=title,noSwitchColor='black')
+            imArray.showColorImage(self.threshold, palette=pColor, plot_contours=True, plotHist=None, 
+                erase_small_events_percent=self.erase_small_events_percent, 
+                fig=self.fig1, ax=self.axs1[n], title=title, noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2,ax=self.axs2[n],title=title,ylabel=None)
             # imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
             #                          invert_y_axis=False, plot_rays=False,
             #                          fig=self.fig3, ax=self.axs3[n], title=title)
             imArray.get_stats_prop()
-            self.axs3[n].imshow(imArray.stats_prop['image_corners'])
+            if n == 0:
+                self.sizes = imArray.stats_prop['sizes']
+                self.lenghts_initial = imArray.stats_prop['lenghts_initial']
+                self.lenghts_final = imArray.stats_prop['lenghts_final']
+                self.curvatures_initial = imArray.stats_prop['curvatures_initial']
+                self.curvatures_final = imArray.stats_prop['curvatures_final']
+            else:
+                self.sizes = np.concatenate((imArray.stats_prop['sizes'], self.sizes))
+                self.lenghts_initial = np.concatenate((imArray.stats_prop['lenghts_initial'], self.lenghts_initial))
+                self.lenghts_final = np.concatenate((imArray.stats_prop['lenghts_final'], self.lenghts_final))
+                self.curvatures_initial = np.concatenate((imArray.stats_prop['curvatures_initial'], self.curvatures_initial))
+                self.curvatures_final = np.concatenate((imArray.stats_prop['curvatures_final'], self.curvatures_final))
+            #self.axs3[n].imshow(imArray.stats_prop['image_corners'])
             if plot_contours:
                 for switch in imArray.contours:
                     cnts = imArray.contours[switch]
                     X,Y = cnts[:,1], cnts[:,0]
-                    self.axs3[n].plot(X,Y,c='w',antialiased=True,lw=1)
+                    self.axs3[n].plot(X, Y, c='k', antialiased=True, lw=1)
+                self.axs3[n].invert_yaxis()
 
         # Out of the loop
+        average_lengths_i, average_sizes = self._get_averages(self.lenghts_initial, self.sizes)
+        self.axs4[0].loglog(self.lenghts_initial, self.sizes, 'bo')
+        self.axs4[0].loglog(average_lengths_i, average_sizes, 'ro')
+        self.axs4[0].set_xlabel("Initial length", fontsize=24)
+        self.axs4[0].set_ylabel("Size", fontsize=24)
+        self.axs4[0].grid(True)
+        average_lengths_f, average_sizes = self._get_averages(self.lenghts_final, self.sizes)
+        self.axs4[1].loglog(self.lenghts_final, self.sizes, 'bo')
+        self.axs4[1].loglog(average_lengths_f, average_sizes, 'ro')
+        self.axs4[1].set_xlabel("Final length", fontsize=24)
+        self.axs4[1].set_ylabel("Size", fontsize=24)
+        self.axs4[1].grid(True)
+        suptitle = " - ".join(self.rootDir.split("/")[-2:])
         for fig in self.figs:
-            fig.suptitle(self.rootDir,fontsize=30)
+            fig.suptitle(suptitle, fontsize=30)
         plt.show()
+
+    def _get_averages(self, lengths, sizes):
+        # Calculus of the avalanche sizes and durations
+        average_lengths = np.unique(lengths)
+        average_sizes = []
+        for l in average_lengths:
+            size = np.mean(np.extract(lengths == l, sizes))
+            average_sizes.append(size)
+        average_sizes = np.array(average_sizes)
+        return average_lengths, average_sizes
 
 if __name__ == "__main__":
     plt.close("all")
@@ -113,29 +162,52 @@ if __name__ == "__main__":
 
     elif choice == 'non_irr':
         set_current = ["0.20","0.22","0.24"][0]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/nonirrad wire/"
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Yuting/nonirrad wire/"
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
         filename_suffix = "_MMStack_Pos0.ome.tif"
-
-        # crop_upper_left_pixel = (158,91)
-        # crop_lower_right_pixel = (360,1040)     
-        # imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
-        
-        # imParameters['firstIm'] = 1
-        # imParameters['lastIm'] = 300
-        # imParameters['filtering'] = 'gauss'
-        # #imParameters['filtering'] = None
-        # imParameters['sigma'] = 1.
-        # imParameters['resize_factor'] = None
-        #threshold = 10
-        #experiments = [0,1,2,3,5,6,7,8]
-        #experiments = [0,1,2]
-        wires = RunWires(rootDir, subdir_pattern, filename_suffix)
+        n_wire = 2
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire)
         wires.plot_results()
-    
+
+    elif choice == 'LPN_20um':
+        set_current = "0.14"
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_LPN/20um_%sA" % set_current
+        if not os.path.isdir(rootDir):
+            print("Chech the path")
+            sys.exit()
+        subdir_pattern = "20um_%sA_10fps_*"  % set_current
+        filename_suffix = "_MMStack_Pos0.ome.tif"
+        n_wire = 2
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
+        wires.plot_results()
+
+    elif choice == 'IEF_old_20um':
+        set_current = "0.145"
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um_%sA" % set_current
+        if not os.path.isdir(rootDir):
+            print("Chech the path")
+            sys.exit()
+        subdir_pattern = "20um_%sA_10fps_*"  % set_current
+        filename_suffix = "_MMStack_Pos0.ome.tif"
+        n_wire = 2
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
+        wires.plot_results()
+
+    elif choice == 'IEF_old_200um':
+        set_current = "0.14"
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/200um_%sA" % set_current
+        if not os.path.isdir(rootDir):
+            print("Chech the path")
+            sys.exit()
+        subdir_pattern = "200um_%sA_10fps_*"  % set_current
+        filename_suffix = "_MMStack_Pos0.ome.tif"
+        n_wire = 1
+        wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
+        wires.plot_results()
+
     elif choice == 'irr':
         set_current = ["0.19","0.21","0.23"][0]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/"
@@ -157,6 +229,8 @@ if __name__ == "__main__":
         threshold = 10
         wires = RunWires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=range(2))
         wires.plot_results()
+
+
     else:
         print("Check the path!")
         sys.exit()
