@@ -1,7 +1,7 @@
 from __future__ import print_function
 import sys
 import os
-import glob
+import glob, re
 import numpy as np
 import matplotlib.pyplot as plt
 import mokas_wires as mkwires
@@ -25,9 +25,14 @@ class RunWires:
         self.motion = wire_ini.motion
         self.erase_small_events_percent = erase_small_events_percent
         # Get the directories based on the pattern
-        sub_dirs = sorted(glob.glob1(rootDir, subdir_pattern))
-        sdirs = [subdir_pattern.replace("*", str(i)) for i in self.experiments]
-        self.sub_dirs = [sd for sd in sdirs if sd in sub_dirs]
+        sub_dirs = np.array(sorted(glob.glob1(rootDir, subdir_pattern)))
+        # Prepare to find a match
+        q = subdir_pattern.replace("*", "(.*)")
+        all_experiments = [np.int(re.search(q, sd).group(1)) for sd in sub_dirs]
+        jj = [x in self.experiments for x in all_experiments]
+        self.sub_dirs = sub_dirs[jj]
+        #sdirs = [subdir_pattern.replace("*", str(i)) for i in self.experiments]
+        #self.sub_dirs = [sd for sd in sdirs if sd in sub_dirs]
         self.filenames = [d+filename_suffix for d in self.sub_dirs]
         print("There are %i files to analyse on the wire %i " % (len(self.filenames), n_wire))
         if self.experiments is None:
@@ -164,7 +169,7 @@ if __name__ == "__main__":
         set_current = ["0.20","0.22","0.24"][0]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Yuting/nonirrad wire/"
         if not os.path.isdir(rootDir):
-            print("Chech the path")
+            print("Chech the path of %s" % rootDir)
             sys.exit()
         subdir_pattern = "*_nonirradiatedwires_%sA_10fps"  % set_current
         filename_suffix = "_MMStack_Pos0.ome.tif"
