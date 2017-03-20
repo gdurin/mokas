@@ -29,11 +29,11 @@ from mokas_domains import Domains
 try:
     import pycuda.driver as driver
     isPyCuda = True
-    print("isPyCuda")
     #free_mem_gpu, total_mem_gpu = driver.mem_get_info()
 except:
     isPyCuda = False
-    print("is-NoT-PyCuda")
+    print("Please install PyCuda")
+    sys.exit()
 
 # Load scikits modules if available
 try:

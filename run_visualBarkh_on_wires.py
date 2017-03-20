@@ -14,8 +14,7 @@ structure = np.ones((NN,NN))
 
 
 class RunWires:
-    def __init__(self, rootDir, subdir_pattern, filename_suffix, n_wire=1,
-        erase_small_events_percent=None):
+    def __init__(self, rootDir, subdir_pattern, n_wire=1, erase_small_events_percent=None):
         self.rootDir = rootDir
         # Get the initial parameters
         wire_ini = mkwires.Wires_ini(rootDir, n_wire)
@@ -33,7 +32,7 @@ class RunWires:
         self.sub_dirs = sub_dirs[jj]
         #sdirs = [subdir_pattern.replace("*", str(i)) for i in self.experiments]
         #self.sub_dirs = [sd for sd in sdirs if sd in sub_dirs]
-        self.filenames = [d+filename_suffix for d in self.sub_dirs]
+        self.filenames = [d + wire_ini.filename_suffix for d in self.sub_dirs]
         print("There are %i files to analyse on the wire %i " % (len(self.filenames), n_wire))
         if self.experiments is None:
             self.n_experiments = len(self.sub_dirs)
@@ -212,6 +211,18 @@ if __name__ == "__main__":
         n_wire = 1
         wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
+
+    elif choice == 'IEF_new_20um':
+        set_current = "0.11"
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_new/20um_%sA" % set_current
+        if not os.path.isdir(rootDir):
+            print("Chech the path")
+            sys.exit()
+        subdir_pattern = "20um_%sA_10fps_*"  % set_current
+        n_wire = 1
+        wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
+        wires.plot_results()
+
 
     elif choice == 'irr':
         set_current = ["0.19","0.21","0.23"][0]

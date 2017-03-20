@@ -224,7 +224,7 @@ class Wires(StackImages):
         while not success:
             im_corners, success = self._find_corners(cluster, n_fast, threshold_fast)
             n_fast -= 1
-            if not success and im_corners == False:
+            if not success and not isinstance(im_corners, np.ndarray):
                 return [], [], None
         corners_index = []
         for i in range(2):
