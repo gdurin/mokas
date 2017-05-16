@@ -1,7 +1,7 @@
 #import pycuda.autoinit
 import pycuda.driver as driver
 
-def gpu_init(device=0, fraction_to_use=0.95):
+def gpu_init(device=0, fraction_to_use=0.95, verbose=False):
     try:
         # =========================================
         # Set the card to work with
@@ -13,7 +13,8 @@ def gpu_init(device=0, fraction_to_use=0.95):
         # =========================================
         # print("current device: %s" % current_dev.name())
         free = fraction_to_use * free
-        print("Total memory of %s: %.2f GB (available: %.2f GB)" % (current_dev.name(), total/1e9, free/1e9))
+        if verbose:
+            print("Total memory of %s: %.2f GB (available: %.2f GB)" % (current_dev.name(), total/1e9, free/1e9))
     except:
         print("pyCUDA not installed properly or device %i not available" % device)
         sys.exit()

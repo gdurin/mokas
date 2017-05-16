@@ -8,6 +8,7 @@ import mahotas
 import skimage.morphology as morph
 import skimage.feature as feature
 from skimage import measure
+import mokas_events as mke
 
 
 class Wires_ini(object):
@@ -27,7 +28,9 @@ class Wires_ini(object):
         self.imParameters['lastIm'] = int(self.default['lastIm'])
         self.imParameters['filtering'] = self.default['filtering']
         self.imParameters['sigma'] = float(self.default['sigma'])
+        self.motion = self.default['motion']
         self.imParameters['rotation'] = float(self.default['rotation'])
+        self.edge_trim_percent = int(self.default['edge_trim_percent'])
         if n_wire > self.n_wires:
             print("Number of the wire not available (1-%i)" % self.n_wires)
         nwire = "n%i" % n_wire
@@ -37,7 +40,6 @@ class Wires_ini(object):
         self.imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
         self.experiments = [int(n) for n in nw['experiments'].split(",")]
         analysis = self.config['Analysis']
-        self.motion = analysis['motion']
         self.threshold = float(analysis['threshold'])
 
 
@@ -46,20 +48,40 @@ class Wires(StackImages):
     define a proper class to handle
     the sequence of images
     taken from wires
+
+    Parameters:
+    motion : has to be downward. will be erased in future versions
+    calculate_edges : trim the edges of the wires
+    zoom_in_data : False|True
+        (do not) show the portion of the wire where the motion occurs
     """
-    def __init__(self, motion='downward', **imParameters):
+    def __init__(self, motion='downward', edge_trim_percent=None,
+        zoom_in_data=True, **imParameters):
+        imParameters['exclude_switches_from_central_domain'] = False # Do not change
+        # By default we get rid of the switched calculated out of the final domain
+        imParameters['exclude_switches_out_of_final_domain'] = True
         StackImages.__init__(self, **imParameters)
         self.motion = motion
+        self.rotation = imParameters['rotation']
+        self.zoom_in_data = zoom_in_data
         n, rows, cols = self.shape
-        if motion == 'downward':
-            self.ref_point = (0, cols//2)
-        elif motion == 'upward':
-            self.ref_point = (rows, cols//2)
-        elif motion == 'leftward':
-            self.ref_point = (rows//2, cols)
-        elif motion == 'rightward':
-            self.ref_point = (rows//2, 0)
-
+        # if motion == 'downward':
+        #     self.ref_point = (0, cols//2)
+        # elif motion == 'upward':
+        #     self.ref_point = (rows, cols//2)
+        # elif motion == 'leftward':
+        #     self.ref_point = (rows//2, cols)
+        # elif motion == 'rightward':
+        #     self.ref_point = (rows//2, 0)
+        # All the figure have to be roated to get the motion downward
+        self.ref_point = (0, cols//2)
+        self.edge_trim_percent = edge_trim_percent
+        if edge_trim_percent:
+            print("Trim edges...")
+            self.row_profile = np.mean(self.Array[0], 0)
+            p1, p2 = self._get_edges(self.Array[0])
+            self.Array = self.Array[:, :, p1:p2+1]
+            n, self.dimX, self.dimY = self.Array.shape
 
     @property
     def switches(self): 
@@ -109,6 +131,26 @@ class Wires(StackImages):
         self.switches_above_min_size = np.array(sws)
         print("Done.")
 
+    def _get_edges(self, im):
+        """
+        Calculate the position of the edge
+        from the first row image
+        edge_percent reduce the width of the wire
+        from both sides
+        """
+        gray_profile = np.mean(im, 0)
+        L2 = len(gray_profile) / 2
+        p1 = np.argmin(gray_profile[:L2])
+        p2 = np.argmin(gray_profile[L2:]) + L2
+        distance = p2 - p1
+        p1 += distance * self.edge_trim_percent / 100
+        p2 -= distance * self.edge_trim_percent / 100
+        # out_mean1 = np.mean(gray_profile[:L2/5])
+        # out_mean2 = np.mean(gray_profile[-L2/5:])
+        # p1 += np.argmax(gray_profile[p1:L2] - out_mean1 > 0) 
+        # gp = gray_profile[L2:p2 + 1] - out_mean2 > 0
+        # p2 -= np.argmax(gp[::-1])
+        return p1, p2
 
     def _get_lenght_and_curvature(self, line):
         """
@@ -274,8 +316,16 @@ class Wires(StackImages):
             i = np.argmax(sizes)
             return im==i+1, sizes[i]
 
+    def _sizes_largest_clusters(self):
+        sizes = np.zeros_like(self.imageNumbers)
+        for switch in self.switches:
+            cluster = self._switchTimes2D == switch
+            cluster, cluster_size = self._largest_cluster(cluster)
+            sizes[switch] = cluster_size
+        return sizes
+
     def find_contours(self, lines_color=None, invert_y_axis=True, step_image=1,
-                        consider_events_around_a_central_domain=True, 
+                        consider_events_around_a_central_domain=False, 
                         initial_domain_region=None, remove_bordering=False,
                         plot_centers_of_mass = False, reference=None, 
                         rescale_area=False, plot_rays=True,
@@ -287,17 +337,110 @@ class Wires(StackImages):
             plt.figure(fig.number)
             if ax is None:
                 ax = fig.gca()
+        print("Print contours....")
         self.contours = {}
         switch0 = self.switches[0]
         cluster = self._switchTimes2D == switch0
-        for switch in self.switches:
+        for switch in self.switches[1:]:
             cluster += self._switchTimes2D == switch
             cluster, cluster_size = self._largest_cluster(cluster)
-            cnts = measure.find_contours(cluster, 0.5)[0]
-            self.contours[switch] = cnts
-            X,Y = cnts[:,1], cnts[:,0]
-            ax.plot(X,Y,c='k',antialiased=True,lw=1)
+            cnts_all = measure.find_contours(cluster, 0.5)
+            cnts_all = self._find_longest_contours(cnts_all, 2)
+            self.contours[switch] = cnts_all
+            for cnts in cnts_all:
+                X, Y = cnts[:,1], cnts[:,0]
+                ax.plot(X, Y, c='k', antialiased=True, lw=1)
         self.is_find_contours = True
         if invert_y_axis:
             ax.invert_yaxis()
         plt.show()
+
+    def _find_longest_contours(self, cnts, n_contours=2):
+        """
+        choose the "n_contours" largest contours
+        """
+        lengths = [len(cnt) for cnt in cnts]
+        if len(lengths) > n_contours:
+            out = []
+            for i in range(n_contours):
+                i0 = np.argmax(lengths)
+                out.append(cnts[i0])
+                lengths.pop(i0)
+                cnts.pop(i0)
+            return out
+        else:
+            return cnts
+
+    def _zeros(self, threshold, method='sub_cluster'):
+        """
+        Find the zeros of the histogram
+        i.e. where the signal == threshold
+        """
+        if method == 'full_histogram':
+            signal = self.N_hist
+        elif method == 'sub_cluster':
+            signal = self._sizes_largest_clusters()
+        # Find the avalanche zeros
+        # 1. step function for v=r
+        fv = np.where(signal > threshold, 1, 0)
+        # 2. Derivative
+        # +1 :"index of the beginning of the avalanche"
+        # -1 :"index of end the of the avalanche -1"
+        dfv = np.diff(fv)
+        # Check that the first nonzero value must be
+        # 1 and the last -1; get rid of the uncorrect values
+        nonzeroIndex = np.nonzero(dfv)[0]
+        if dfv[nonzeroIndex[0]] == -1:
+            nonzeroIndex = nonzeroIndex[1:]
+        if dfv[nonzeroIndex[-1]] == 1:
+            nonzeroIndex = nonzeroIndex[:-1]
+
+        # check if evaluation is correct: even n. of data
+        if len(nonzeroIndex) % 2:
+            print("Error in evaluating the avalanche limits")
+
+        # The limits belows are calculated 
+        # when the cluster is larger than the threshold
+        # Array of the start of the cluster
+        x0s = nonzeroIndex[::2] + 1
+        # Array of the end of the cluster
+        x1s = nonzeroIndex[1::2]
+        if x1s[-1] > len(signal):
+            x1s[-1] = len(signal)
+        return x0s, x1s
+
+    def plotEventsAndClusters(self, cluster_threshold=5, method='sub_cluster', fig=None, axs=None, title=None):
+        """
+        method: str
+            sub_cluster: detect if there is a sub_cluster larger than the threshold
+            full_histogram: detect if there total number of switches is larger than the threshold
+        """
+        if not self.is_histogram:
+            self.plotHistogram(self._switchTimes2D)
+        x0s, x1s = self._zeros(cluster_threshold, method=method)
+        self.events_and_clusters = mke.EventsAndClusters(self._switchTimes2D)
+        self.events_and_clusters.get_events_and_clusters(min_cluster_size=0, cluster_limits=zip(x0s,x1s))
+        self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, fig=fig, axs=axs, title=title)
+
+
+    def post_processing(self, compare_to_row_images=False, fillValue=-1):
+        """
+        This is an experimental feature to get rid of
+        (small) sub_clusters which do not have a corresponding significant
+        variation in the gray scale of the row images
+        """
+        switch2D = np.copy(self._switchTimes2D)
+        if compare_to_row_images:
+            row_data2D = self.Array
+            for sw in self.switches:
+                q = switch2D == sw
+                sub_clusters, n_sub_clusters = mahotas.label(q, self.NNstructure)
+                for i in range(1, n_sub_clusters+1):
+                    p = sub_clusters == i
+                    average_gray_step = np.mean(row_data2D[sw,p]-row_data2D[sw-1,p])
+                    print(average_gray_step)
+                    if np.abs(average_gray_step) < self._threshold/2.:
+                        switch2D[p] = fillValue
+                        print("Done")
+        return switch2D
+

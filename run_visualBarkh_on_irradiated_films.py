@@ -267,7 +267,19 @@ if __name__ == "__main__":
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
             threshold = 12
-            palette = 'coolwarm'      
+            palette = 'coolwarm'
+        elif k == "B38":
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Bhaskar/B38_annealed"
+            imParameters['pattern'] = "bubbleUltraSlowCreep_9mV_0.38mT_01.avi"
+            imParameters['imCrop'] = [(253,196),(253+145,196+145)]
+            imParameters['firstIm'] = 100 # Use python convention: start from zero!
+            imParameters['lastIm'] = 2500
+            imParameters['filtering'] = 'gauss'
+            imParameters['sigma'] = 2
+            imParameters['subtract'] = None # Subtract a reference image
+            threshold = 2
+            palette = 'coolwarm'
+            erase_small_events_percent = None
         else:
             print("Check the path!")
             sys.exit()
@@ -283,7 +295,7 @@ if __name__ == "__main__":
         imArray = bk.StackImages(**imParameters)
         plot_contours = True
         imArray.showColorImage(threshold=threshold, palette=palette, plot_contours=plot_contours, 
-            erase_small_events_percent=10)
+            erase_small_events_percent=erase_small_events_percent)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
         #'center_of_mass')

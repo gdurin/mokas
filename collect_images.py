@@ -1,5 +1,7 @@
+from __future__ import print_function
 # file video
 # to load numpy arrays from a video
+
 import sys
 import os
 import glob
@@ -68,7 +70,6 @@ class Images:
         self.filtering = filtering
         self.sigma = sigma
         self.mode = self._set_mode()
-        #print(resolution)
         if resolution == 8:
             self.resolution = np.int8
         elif resolution == 16:
@@ -139,12 +140,24 @@ class Images:
         is_initialized = False
         k = 0
         cap = cv2.VideoCapture(self.filename)
+        print("Loading avi file")
+        if not cap.isOpened():
+            print("File %s is not opened" % self.filename)
         while(cap.isOpened()):
-            print(k)
+            if not k%10:
+                print(k)
+                sys.stdout.flush()
+            if k < self.firstIm:
+                k += 1
+                continue
+            if k > self.lastIm and self.lastIm != -1:
+                break
             ret, frame = cap.read()
             if not ret:
                 break
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if self.crop is not None:
+                gray = self._image_crop(gray, self.crop)
             if self.filtering:
                 gray = self._image_filter(gray)
             gray = gray[np.newaxis,...]
@@ -152,10 +165,15 @@ class Images:
                 self.images = gray
                 is_initialized = True
             else:   
-                self.images = np.vstack((self.images,gray)) 
+                self.images = np.vstack((self.images, gray)) 
             k += 1
-        self.imageNumbers = range(k)
+        if self.lastIm == -1:
+            lastIm = k 
+        else:
+            lastIm = self.lastIm + 1
+        self.imageNumbers = range(self.firstIm, lastIm)
         cap.release()
+        print(gray)
 
     def _from_tif(self):
         try:
@@ -186,8 +204,6 @@ class Images:
             print("Original file: (", frames, height, width, ")")
             print("Loaded file", self.images.shape)
             frames = n
-
-            #sys.exit()
         # Check if the gray range is 2**BitDepth, otherwise do histogram equalization
         self.is_hist_equalization = False
         # if max_gray_level != 2**bit_depth - 1 and self.is_hist_equalization==False:
@@ -225,16 +241,26 @@ class Images:
                     self.images[n] = self._image_filter(image)
             print("Done")
        
-    def _image_crop(self, crop_limits):
+    def _image_crop(self, image, crop_limits):
         """
         crop limits are in the image reference frame (not of array)
         has to be a list of two pixels,
         i.e. [crop_upper_left_pixel,crop_lower_right_pixel]
+        Image can be a single image, or a sequence
         """
-        n, rows, cols = self.images.shape
-        [(col_min,row_min),(col_max,row_max)] = crop_limits
-        #xmin, xmax, ymin, ymax = crop_limits
-        self.images = self.images[:, row_min : row_max, col_min : col_max]
+        [(col_min, row_min),(col_max, row_max)] = crop_limits
+        im_shape = image.shape
+        if len(im_shape) == 2:
+           rows, cols = image.shape
+           image = image[row_min : row_max, col_min : col_max]
+        elif len(im_shape) == 3:
+            n, rows, cols = image.shape
+            image = image[:, row_min : row_max, col_min : col_max]
+        else:
+            print("Problems with cropping...")
+            print("Image shape: %s" % im_shape)
+            sys.exit()
+        return image
 
     def _image_rotate(self, rotation):
         # Rotate if not done
@@ -262,7 +288,7 @@ class Images:
         else:
             out = filters[self.filtering](image, self.sigma)
         if out.dtype is not np.dtype(self.resolution):
-            print("Converting to %s" % str(self.resolution))
+            #print("Converting to %s" % str(self.resolution))
             out = out.astype(self.resolution)
         return out
 
@@ -331,14 +357,14 @@ class Images:
     def collector(self):
         # Upload the images
         self.from_type()
-        if self.mode != 'pattern':          
+        if self.mode != 'pattern' and self.mode != 'avi':          
             if self.firstIm != 0 or self.lastIm != -1:
                 self.images = self.images[self.firstIm : self.lastIm + 1]
                 self.imageNumbers = self.imageNumbers[self.firstIm : self.lastIm + 1]
-        if self.crop is not None:
-            print("Original image size: ", self.images.shape)
-            self._image_crop(self.crop)
-            print("Cropped image size: ", self.images.shape)
+        if self.crop is not None and self.mode != "avi":
+            print("Original image size: (%i, %i, %i)" % self.images.shape)
+            self.images = self._image_crop(self.images, self.crop)
+            print("Cropped image size: (%i, %i, %i)" % self.images.shape)
         if self.rotation:
             print(self.rotation)
             self._image_rotate(self.rotation)
@@ -384,15 +410,19 @@ if __name__ == "__main__":
     pattern = "01_Irr_400uC_0.1A_MMStack_Pos0.ome.tif"
     root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/nonirrad wire/01_nonirradiatedwires_0.20A_10fps"
     pattern = "01_nonirradiatedwires_0.20A_10fps_MMStack_Pos0.ome.tif"
+    im_crop = (876,1117,0,1040)
     #root_dir, pattern = os.path.split(filename)
     #root_dir = "/home/gf/Meas/Creep/Alex/PtCoPt_simm/run6/imgs"
     #pattern = "img*.tif"
-    im_crop = None  
-    #im_crop = (876,1117,0,1040)
+    root_dir = "/home/gf/Meas/Creep/CoFeB/Film/Bhaskar/B38_annealed"
+    pattern = "bubbleUltraSlowCreep_9mV_0.38mT_01.avi"
+    im_crop = None
+    im_crop = [(253,196),(253+145,196+145)]
     filtering = 'gauss'
-    #filtering = None
+    filtering = None
     sigma = 2
-    out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, crop=im_crop, subtract=None)
+    out, n = images2array(root_dir, pattern, filtering=filtering, sigma=sigma, firstIm=90,
+        lastIm=500, crop=im_crop, subtract=None)
     print(out.shape)
     #fout = "exp_40mV_20s_21.pkl"
     #pickle.dump(out, fout)

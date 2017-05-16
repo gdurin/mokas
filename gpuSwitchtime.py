@@ -6,7 +6,8 @@ from pycuda.compiler import SourceModule
 import mokas_gpu as mkGpu
 
 
-def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None, ctx=None):
+def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, 
+    current_dev=None, ctx=None, verbose=False):
     """
     Return a matrix with the positions of a step in a sequence for each pixel
 
@@ -17,7 +18,8 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None
     # =========================================
     # Set the card to work with: DONE EXTERNALLY
     # =========================================
-    print("working on card %s" % current_dev.name())
+    if verbose:
+        print("working on card %s" % current_dev.name())
     used_device = ctx.get_device()
     # Convert to int32
     dim_z, dim_y, dim_x = stackImages.shape
@@ -26,7 +28,8 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None
     block_Y = 1
     grid_X, grid_Y = dim_x*dim_y*dim_z / block_X if (dim_x*dim_y*dim_z % block_X)==0 else dim_x*dim_y*dim_z / block_X +1 , 1
     grid_X2, grid_Y2 = dim_x / block_X + 1, dim_y/ block_Y + 1
-    print("Print grid dimensions: ", grid_X, grid_Y)
+    if verbose:
+        print("Print grid dimensions: ", grid_X, grid_Y)
     convolStack = np.zeros((dim_z , dim_y, dim_x), dtype=np.float32)
     switch = np.zeros((dim_y,dim_x), dtype=np.int32)
     levels = np.zeros((dim_y,dim_x), dtype=np.int32)
@@ -34,16 +37,19 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None
     multiplier32 = np.int32(multiplier)
     #Host to Device copy
     stack_gpu = to_gpu(stackImages)
-    print("Stack_gpu copied")
+    if verbose:
+        print("Stack_gpu copied")
     switch_gpu = to_gpu(switch)
-    print("Switch_gpu copied")
+    if verbose:
+        print("Switch_gpu copied")
     levels_gpu = to_gpu(levels)
-    print("Level_gpu copied")
+    if verbose:
+        print("Level_gpu copied")
     convolStack_gpu = to_gpu(convolStack)
-    print("convolStack_gpu copied")
-    print("Data transfered to GPU")
-
-    print("Tokenizing 1")
+    if verbose:
+        print("convolStack_gpu copied")
+        print("Data transfered to GPU")
+        print("Tokenizing 1")
     # contracts the kernel size when approaching edges
     mod1_a = SourceModule("""
     __global__ void findconvolve1d(int *stack_gpu, float *convolStack_gpu, int dim_x, int dim_y, int dim_z, int convolSize,int multiplier0)
@@ -145,7 +151,10 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None
         }
  	}
     """)
-    print("Tokenizing 2")
+
+    if verbose:
+        print("Tokenizing 2")
+
     mod2 = SourceModule("""
     __global__ void findmin(float *convolStack_gpu, int *switch_gpu, int *levels_gpu, int dim_x, int dim_y, int dim_z)
     {
@@ -199,34 +208,41 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, current_dev=None
     # """)
 
 
-
-    print("Defining kernel convolve")
+    if verbose:
+        print("Defining kernel convolve")
     func_findconvolve1d = mod1_c.get_function("findconvolve1d")
     # Get the array with the switching time
-    print("Defining kernel findmin")
+    if verbose:
+        print("Defining kernel findmin")
     func_findmin = mod2.get_function("findmin")
 
     #Function calls
-    print("Ready to calculate the convolution")
+    if verbose:
+        print("Ready to calculate the convolution")
     func_findconvolve1d(stack_gpu, convolStack_gpu, dim_X, dim_Y, dim_Z,convolSize32,multiplier32, block=(block_X, block_Y, 1),
          grid=(grid_X, grid_Y))
-    print("Done.")
-    print("Ready to find the minimum of convolution")
+    if verbose:
+        print("Done.")
+        print("Ready to find the minimum of convolution")
     func_findmin(convolStack_gpu, switch_gpu, levels_gpu,  dim_X, dim_Y, dim_Z,  block=(block_X, block_Y, 1),
           grid=(grid_X2, grid_Y2))
-    print("Done")
-    #Device to host copy  
-    print("Copy to Host switchtimes")
+    if verbose:
+        print("Done")
+        #Device to host copy  
+        print("Copy to Host switchtimes")
     switch = switch_gpu.get()
-    print("Copy to Host levels")
+    if verbose:
+        print("Copy to Host levels")
     levels = levels_gpu.get()
-    print("Done")
+    if verbose:
+        print("Done")
     # As an alternative
     #driver.memcpy_dtoh(switch, switch_gpu)
     #driver.memcpy_dtoh(levels, levels_gpu)
 
     #Free GPU memory
-    print("Clearing memory of GPU")
+    if verbose:
+        print("Clearing memory of GPU")
     stack_gpu.gpudata.free()
     switch_gpu.gpudata.free()
     convolStack_gpu.gpudata.free()

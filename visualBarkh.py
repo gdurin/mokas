@@ -134,7 +134,7 @@ class StackImages:
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
-                 rotation=None):
+                 rotation=None, fillValue=-1):
         """
         Initialized the class
         """
@@ -152,6 +152,7 @@ class StackImages:
         self._figTimeSeq = None
         self.figDiffs = None
         self._figHistogram = None
+        self.is_histogram = False
         self._figColorImage = None
         self._figColorImage2 = None
         self.isConnectionRawImage = False
@@ -163,6 +164,7 @@ class StackImages:
         self.isTwoImages = False
         self.is_minmax_switches = False
         self.pattern = pattern
+        self.fillValue = fillValue
         #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         self.NNstructure = np.ones((3,3))
         if boundary == 'periodic':
@@ -172,7 +174,7 @@ class StackImages:
         if not lastIm:
             lastIm = -1
         #self.exclude_switches_from_central_domain = exclude_switches_from_central_domain
-        #self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
+        self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
 
         # Check paths
         if not os.path.isdir(self._mainDir):
@@ -436,7 +438,7 @@ class StackImages:
             print("Warning: you should use a tuple as image Numbers")
 
         try:
-            plt.imshow(self._imDiff(imNumbers, invert),plt.cm.gray)
+            plt.imshow(self._imDiff(imNumbers, invert), plt.cm.gray)
             plt.show()
         except:
             return
@@ -600,7 +602,7 @@ class StackImages:
         self.getSwitchTimesAndSteps()
         return
 
-    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=10, fillValue=-1):
+    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=None):
         """
         Calculate the color Image using the output of getSwitchTimesAndSteps
 
@@ -632,13 +634,22 @@ class StackImages:
         self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
         central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
         # Calculate the switch time Array (2D) considering the threshold and the start from zero
-        self._switchTimes2D = self._getSwitchTimesOverThreshold(False, fillValue).reshape(self.dimX, self.dimY)
+        self._switchTimes2D = self._getSwitchTimesOverThreshold(False, self.fillValue).reshape(self.dimX, self.dimY)
         self._switchSteps2D = self._switchSteps.reshape(self.dimX, self.dimY)
         self._switchTimes2D_original = np.copy(self._switchTimes2D)
-        # Now check if getting rid of the wrong switches 
+        # Now check if getting rid of the wrong switches
+        if self.exclude_switches_out_of_final_domain:
+            q = self._switchTimes2D != self.fillValue
+            clusters, n_cluster = mahotas.label(q, self.NNstructure)
+            sizes = mahotas.labeled.labeled_size(clusters)
+            max_size = np.max(sizes[1:])
+            too_small = np.where(sizes < max_size)
+            # Get the largest final domain only
+            final_domain = mahotas.labeled.remove_regions(clusters, too_small).astype('bool')
+            self._switchTimes2D[~final_domain] = self.fillValue
         if erase_small_events_percent:
             percentage = erase_small_events_percent/100.
-            # This gets rid of the wrong switches
+            # This gets rid of the wrong switchesf
             # Using the cluster max sizes for the switches
             # It redefines self._switchTimes2D
             #self.final_domain = self._find_final_domain(self._switchTimes2D, fillValue)
@@ -657,8 +668,8 @@ class StackImages:
             #index_max_size = sizes.argmax()
             #self.initial_domain = im == index_max_size + 1
             # Erase the small switches
-            self._switchTimes2D[im == 0] = fillValue
-        if fillValue in self._switchTimes2D:
+            self._switchTimes2D[im == 0] = self.fillValue
+        if self.fillValue in self._switchTimes2D:
             self._switchTimesUnique = np.unique(self._switchTimes2D)[1:] + self.min_switch
         else:
             self._switchTimesUnique = np.unique(self._switchTimes2D) + self.min_switch
@@ -667,7 +678,7 @@ class StackImages:
 
 
     def showColorImage(self, threshold=None, data=None, palette='random', erase_small_events_percent=None,
-                        plotHist=False, plot_contours=False,
+                        plotHist=False, plot_contours=False, 
                         noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
         """
         Show the calculated color Image of the avalanches.
@@ -733,7 +744,7 @@ class StackImages:
                 (p0, p1, self._switchTimes2D[x,y], self._switchSteps2D[x,y])
             return s
         else:
-            return None
+            return ""
 
     def _call_pixel_time_sequence(self, event):
         if event.dblclick:
@@ -773,8 +784,11 @@ class StackImages:
         cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
         return fig
 
-    def plotHistogram(self,data,fig=None,ax=None,title=None,ylabel=None):
-        central_points = np.array(np.unique(data), dtype=float)
+    def plotHistogram(self, data, fig=None, ax=None, title=None, ylabel=None):
+        #image_numbers = np.unique(data)
+        #i0, i1 = image_numbers[0], image_numbers[-1] + 1
+        #central_points = np.arange(i0, i1)
+        central_points = self.imageNumbers
         rng = np.append(central_points, central_points[-1] + 1) - 0.5
         if fig:
             plt.figure(fig.number)
@@ -798,6 +812,7 @@ class StackImages:
         for thisfrac, thispatch in zip(central_points, patches):
             c = self._colorMap(self.norm(thisfrac))
             thispatch.set_facecolor(c)
+        self.is_histogram = True
         return None
 
 
@@ -1092,8 +1107,7 @@ class StackImages:
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
                                           for j in np.random.permutation(range(n_clusters))]
         if preAvalanches:
-            w = self._getSwitchTimesOverThreshold(False, fillValue=-1).\
-                        reshape(self.dimX, self.dimY) 
+            w = self._getSwitchTimesOverThreshold(False, fillValue=self.fillValue).reshape(self.dimX, self.dimY) 
             white = (w < self.nImage) & (w > 0)
             im = im + white * (max(im.flatten()) + 1)
             myPalette = myPalette + [(1,1,1)] # Add white to the palette
@@ -1520,7 +1534,7 @@ class StackImages:
         self.is_minmax_switches = True
 
 
-    def _find_final_domain(self, data, fillValue=-1):
+    def _find_final_domain(self, data):
         """
         find the final domain
         if use_max_criterium:
@@ -1531,7 +1545,7 @@ class StackImages:
             is_touching = True
             k = -1
             while (is_touching == True):
-                im, n_cluster = mahotas.label(data!=fillValue, self.NNstructure)
+                im, n_cluster = mahotas.label(data!=self.fillValue, self.NNstructure)
                 sizes = mahotas.labeled.labeled_size(im)[1:]
                 index_max_size = sizes.argmax()
                 final_domain = im == index_max_size + 1
@@ -1547,7 +1561,7 @@ class StackImages:
                     self.firstSw = self.sw[self.n_first]
                     self.is_minmax_switches = True
                 else:
-                    data[data == self.sw[k]] = fillValue
+                    data[data == self.sw[k]] = self.fillValue
                     k -= 1
 
         else:
