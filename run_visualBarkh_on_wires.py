@@ -81,16 +81,20 @@ class RunWires:
                 nImages, rows, cols = imArray.shape
                 pColor = get_colors(nImages, 'pastel', norm=True)
             self.imArray_collector[experiment] = imArray
-            imArray.showColorImage(self.threshold, palette=pColor, plot_contours=True, plotHist=None, 
-                erase_small_events_percent=self.erase_small_events_percent, 
-                fig=self.fig1, ax=self.axs1[0, n], title=title, noSwitchColor='black')
+            imArray.showColorImage(self.threshold, palette=pColor, 
+                                    plot_contours=True, plotHist=None, 
+                                    erase_small_events_percent=self.erase_small_events_percent, 
+                                    fig=self.fig1, ax=self.axs1[0, n], 
+                                    title=title, noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
-                                    fig=self.fig2, ax=self.axs2[n, 0], title=title, ylabel=None)
+                                    fig=self.fig2, ax=self.axs2[n, 0],
+                                    title=title, ylabel=None)
             # imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
             #                          invert_y_axis=False, plot_rays=False,
             #                          fig=self.fig3, ax=self.axs3[n], title=title)
             imArray.get_stats_prop()
-            imArray.plotEventsAndClusters(cluster_threshold=30, fig=self.fig3, axs=(self.axs3[n,0], self.axs3[n,1]), title=title)
+            imArray.plotEventsAndClusters(cluster_threshold=30, fig=self.fig3, axs=(self.axs3[n,0], self.axs3[n,1]), 
+                                            title=title, with_cluster_number=True)
             if n == 0:
                 self.sizes = imArray.stats_prop['sizes']
                 self.lenghts_initial = imArray.stats_prop['lenghts_initial']

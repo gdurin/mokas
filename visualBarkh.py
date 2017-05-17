@@ -1103,7 +1103,7 @@ class StackImages:
             #plt.subplot(2,3,6)
         im, n_clusters = self.label(switchTimes_images)
         self.outIm = im
-        myPalette_background = [(0.5,0.5,0.5)]
+        myPalette_background = [(0.75,0.75,0.75)]
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
                                           for j in np.random.permutation(range(n_clusters))]
         if preAvalanches:

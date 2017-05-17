@@ -6,9 +6,12 @@ import getLogDistributions as gLD
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from skimage import measure
-
+import scipy.ndimage as nd
 
 def pixels_at_edges(cluster, with_diagonal=True):
+    """
+    Finds the pixels at the edges of a compact cluster
+    """
     rolled = np.roll(cluster, 1, axis=0)          # shift down
     rolled[0, :] = False
     z = np.logical_or(cluster, rolled)
@@ -186,9 +189,11 @@ class EventsAndClusters():
         method to get the clusters define by the limits, i.e. the values of the
         switches which define the initial and final frame of the cluster
         This is a two-pass calculation:
-        I : the clusters are calculated using the limits (cluster_limits) and a minimum_cluster_size
-        can be used
-        II : 
+        I : the clusters are calculated using the limits (cluster_limits) calculated elsewhere
+        using a threshold
+        II : add the switches between the end and the start of a cluster which are below the threshold
+
+
         """
         print("Using the limits")
         cluster2D = np.copy(self.switch2D)
@@ -202,15 +207,17 @@ class EventsAndClusters():
             if self.set_init_time:
                 sw_in, sw_fin = sw_fin, sw_in
             switches = range(sw_in, sw_fin, istep)
+            # loop for the switches within the limits
             for sw0 in switches:
                 q = cluster2D == sw0
                 sw_next = sw0 + istep
                 sub_clusters, n_sub_clusters = mahotas.label(q, self.NNstructure)
                 for i in range(1, n_sub_clusters+1):
                     cluster = sub_clusters == i
-                    size_cluster = np.sum(cluster)
-                    if size_cluster < min_cluster_size:
-                        break
+                    # Check on the size of EACH cluster seems not needed
+                    #size_cluster = np.sum(cluster)
+                    #if size_cluster < min_cluster_size:
+                    #    break
                     cluster_edge = pixels_at_edges(cluster)
                     switches_at_edge = np.extract(cluster_edge, cluster2D)
                     if sw_next in switches_at_edge:
@@ -241,6 +248,7 @@ class EventsAndClusters():
                         cluster2D[cluster] = sw_in
                     else:
                         cluster2D[cluster] = sw_fin
+                main_cluster_size = size_cluster # update the largest cluster size
 
             # im = np.logical_and((self.switch2D >=x0),(self.switch2D <=x1))
             # if self.set_init_time:
@@ -305,7 +313,10 @@ class EventsAndClusters():
         return average_cluster_sizes, average_cluster_durations
 
 
-    def plot_maps(self, cmap='pastel', zoom_in_data=True, fig=None, axs=None, title=None):
+    def plot_maps(self, cmap='pastel', zoom_in_data=True, 
+                    fig=None, axs=None, title=None,
+                    with_cluster_number=True):
+
         if not self.is_events_and_clusters:
             self.get_events_and_clusters()
 
@@ -341,6 +352,7 @@ class EventsAndClusters():
             ax0, ax1 = axs
         ax0.imshow(switch2D, cmap=cmap)
         ax1.imshow(cluster2D, cmap=cmap)
+        font = {'weight': 'normal', 'size': 12}
         for i in cluster_switches:
             cluster = cluster2D == i
             cnts = measure.find_contours(cluster, 0.5)
@@ -348,6 +360,11 @@ class EventsAndClusters():
                 X,Y = cnt[:,1], cnt[:,0]
                 for ax in [ax0, ax1]:
                     ax.plot(X, Y, c='k', antialiased=True, lw=1)
+            if with_cluster_number:
+                yc, xc = nd.measurements.center_of_mass(cluster)
+                ax1.text(xc, yc, str(i), horizontalalignment='center',
+                    verticalalignment='center', fontdict=font)
+
         if title:
             fig.suptitle(title, fontsize=30)
 

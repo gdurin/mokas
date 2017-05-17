@@ -135,7 +135,7 @@ class Wires(StackImages):
         """
         Calculate the position of the edge
         from the first row image
-        edge_percent reduce the width of the wire
+        edge_trim_percent reduces the width of the wire
         from both sides
         """
         gray_profile = np.mean(im, 0)
@@ -371,7 +371,7 @@ class Wires(StackImages):
         else:
             return cnts
 
-    def _zeros(self, threshold, method='sub_cluster'):
+    def _zeros(self, threshold, method='full_histogram'):
         """
         Find the zeros of the histogram
         i.e. where the signal == threshold
@@ -409,18 +409,20 @@ class Wires(StackImages):
             x1s[-1] = len(signal)
         return x0s, x1s
 
-    def plotEventsAndClusters(self, cluster_threshold=5, method='sub_cluster', fig=None, axs=None, title=None):
+    def plotEventsAndClusters(self, cluster_threshold=5, method='full_histogram', 
+                                fig=None, axs=None, title=None, with_cluster_number=True):
         """
         method: str
             sub_cluster: detect if there is a sub_cluster larger than the threshold
             full_histogram: detect if there total number of switches is larger than the threshold
         """
-        if not self.is_histogram:
+        if not self.is_histogram:   
             self.plotHistogram(self._switchTimes2D)
         x0s, x1s = self._zeros(cluster_threshold, method=method)
         self.events_and_clusters = mke.EventsAndClusters(self._switchTimes2D)
         self.events_and_clusters.get_events_and_clusters(min_cluster_size=0, cluster_limits=zip(x0s,x1s))
-        self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, fig=fig, axs=axs, title=title)
+        self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, 
+                                            fig=fig, axs=axs, title=title, with_cluster_number=True)
 
 
     def post_processing(self, compare_to_row_images=False, fillValue=-1):
