@@ -9,23 +9,20 @@ from mokas_colors import get_colors
 from natsort import natsorted
 
 
-p2p = 3 # Pixel to pixel (linear) distance for cluster detection
-NN = 2*p2p + 1
-structure = np.ones((NN,NN))
-
-
 class RunWires:
-    def __init__(self, rootDir, subdir_pattern, n_wire=1, erase_small_events_percent=None):
+    def __init__(self, rootDir, subdir_pattern, n_wire=1, 
+                erase_small_events_percent=None):
         self.rootDir = rootDir
         # Get the initial parameters
         wire_ini = mkwires.Wires_ini(rootDir, n_wire)
         self.imParameters = wire_ini.imParameters
         self.experiments = wire_ini.experiments
         self.threshold = wire_ini.threshold
-        self.motion = wire_ini.motion
-        self.edge_trim_percent = wire_ini.edge_trim_percent
         self.rotation = self.imParameters['rotation']
         self.erase_small_events_percent = erase_small_events_percent
+        self.wireParameters = {'motion' : wire_ini.motion, 
+                            'edge_trim_percent' : wire_ini.edge_trim_percent, 
+                            'zoom_in_data' : True}
         # Get the directories based on the pattern
         sub_dirs = natsorted(glob.glob1(rootDir, subdir_pattern))
         sub_dirs = np.array(sub_dirs)
@@ -45,7 +42,7 @@ class RunWires:
             self.n_experiments = len(self.experiments)
         print(self.filenames[0])
         self.full_title = ", ".join(self.filenames[0].split("_")[1:4])
-       
+        
 
     def plot_results(self, plot_contours=True):
         """
@@ -66,6 +63,7 @@ class RunWires:
         self.fig4, self.axs4 = plt.subplots(1, 2, sharex=True, sharey=True, squeeze=False) # Sizes vs lenghts
         self.figs.append(self.fig4)
         #for n in range(self.n_experiments):
+        allParameters = self.wireParameters.copy()
         for n, experiment in enumerate(self.experiments):
             sub_dir = self.sub_dirs[n]
             #trial = sub_dir[:2]
@@ -76,7 +74,8 @@ class RunWires:
             print("#" * 50)
             print("Experiment # %i: %s" % (experiment, filename))
             #imArray = StackImages(**self.imParameters)
-            imArray = mkwires.Wires(self.motion, self.edge_trim_percent, **self.imParameters)
+            allParameters.update(self.imParameters)
+            imArray = mkwires.Wires(**allParameters)
             if n == 0:
                 nImages, rows, cols = imArray.shape
                 pColor = get_colors(nImages, 'pastel', norm=True)
@@ -95,6 +94,7 @@ class RunWires:
             imArray.get_stats_prop()
             imArray.plotEventsAndClusters(cluster_threshold=30, fig=self.fig3, axs=(self.axs3[n,0], self.axs3[n,1]), 
                                             title=title, with_cluster_number=True)
+            imArray.cluster2D = imArray.events_and_clusters.cluster2D
             if n == 0:
                 self.sizes = imArray.stats_prop['sizes']
                 self.lenghts_initial = imArray.stats_prop['lenghts_initial']
@@ -133,6 +133,26 @@ class RunWires:
         for fig in self.figs:
             fig.suptitle(suptitle, fontsize=30)
         plt.show()
+
+    def save_hdf5(self):
+        for experiment in self.imArray_collector:
+            wire = self.imArray_collector[experiment]
+            data = [wire.cluster2D, wire._switchTimes2D, wire._switchSteps2D]
+            labels = ['cluster2D', 'switchTimes2D', 'switchSteps2D']
+            wire.hdf5.save_data(data, labels, dtype=np.int16)
+            # Save histogram
+            hist = [wire.N_hist, wire.bins_hist]
+            hist_labels = ['N_hist', 'bins_hist']
+            wire.hdf5.save_data(hist, hist_labels, dtype=np.float32)
+
+    def save_figs(self):
+        res_dir = os.path.join(self.rootDir, 'Results')
+        if not os.path.isdir(res_dir):
+            os.mkdir(res_dir)
+        out_string = "_".join([str(e) for e in self.experiments])
+        filename = os.path.join(res_dir, "events_and_clusters_exp%s.png" % out_string)
+        self.fig3.savefig(filename)
+
 
     def _get_averages(self, lengths, sizes):
         # Calculus of the avalanche sizes and durations
@@ -192,6 +212,8 @@ if __name__ == "__main__":
         wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
 
+    # As on May 24, this is the example to follow
+    # Added hdf5=True
     elif choice == 'IEF_old_20um':
         set_current = sys.argv[2]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_%sA" % set_current
@@ -202,6 +224,8 @@ if __name__ == "__main__":
         n_wire = 1
         wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
+        wires.save_hdf5()
+        wires.save_figs()
 
     elif choice == 'IEF_old_200um':
         set_current = "0.14"
@@ -215,7 +239,6 @@ if __name__ == "__main__":
         wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
 
-    # Use the example below as reference, as it works
     elif choice == 'IEF_new_20um':
         set_current = sys.argv[2]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_new/20um_%sA" % set_current

@@ -56,7 +56,7 @@ def getAxyLabels(labels, imageDir="Left_to_right", edgeThickness=1, fraction=Non
     setLrbt.remove(0)
     maxLabel = labels.max()
     # Prepare a list with all '0000' labels
-    list_Axy = ['0000']*maxLabel
+    list_Axy = ['0000' for i in range(maxLabel)]
     # Search for the Axy except for the A00
     for cluster in setLrbt: # iter over clusters touching the edges
         fraction_size = int(fraction * nd.sum(labels == cluster)) + 1
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     print(labels)
     list_sizes = nd.sum(a, labels, range(1,n+1))
     array_sizes = scipy.array(list_sizes,dtype='int16')
-    array_Axy = getAxyLabels(labels,'Bottom_to_top', edgeThickness=1, fraction=0.5)
+    array_Axy = getAxyLabels(labels,'Bottom_to_top', edgeThickness=1, fraction=None)
     for Axy in set(array_Axy):
         sizes = array_sizes[array_Axy==Axy] # Not bad...
         d[Axy] = scipy.concatenate((d.get(Axy,a0),sizes))

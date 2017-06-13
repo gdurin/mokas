@@ -20,7 +20,8 @@ from skimage.exposure import equalize_adapthist
 import bilateralFilter2 as blf
 import gaussianFilter as gf
 from PIL import Image
-
+import h5py
+import mokas_hdf5 as mhdf5
 
 filters = {'gauss': nd.gaussian_filter, 'fouriergauss': nd.fourier_gaussian,\
            'median': nd.median_filter, 'wiener': signal.wiener, 'rof':None, 'binary': None}
@@ -54,7 +55,7 @@ class Images:
     """
     def __init__(self, root_dir, pattern, firstIm=0, lastIm=-1, resolution=16,
                 is_hist_equalization=False, crop=None, 
-                rotation=None, filtering=None, sigma=None): 
+                rotation=None, filtering=None, sigma=None, hdf5=False): 
         """
         initialization 
 
@@ -69,6 +70,7 @@ class Images:
         self.is_rotated = False
         self.filtering = filtering
         self.sigma = sigma
+        self.hdf5 = hdf5
         self.mode = self._set_mode()
         if resolution == 8:
             self.resolution = np.int8
@@ -380,22 +382,47 @@ class Images:
             print("Len of imageNumbers: %i") % len(self.imageNumbers)
         return self.images, self.imageNumbers
 
+def _collect_images(signature0):
+    im = Images(**signature0)
+    images, imageNumbers = im.collector()
+    return images, imageNumbers
+
 def images2array(root_dir, pattern, firstIm=0, lastIm=-1, crop=None, rotation=None,
-    filtering=None, sigma=None, subtract=None):
+    filtering=None, sigma=None, subtract=None, hdf5_use=False, hdf5_signature=None):
     """
     subtract: int or None
         Subtract image # as background
     """
-    im = Images(root_dir=root_dir, pattern=pattern, firstIm=firstIm, lastIm=lastIm, 
-        crop=crop, rotation=rotation, filtering=filtering, sigma=sigma)
-    images, imageNumbers = im.collector()
+    signature0 = {'root_dir':root_dir, 'pattern':pattern, 'firstIm':firstIm, 'lastIm':lastIm, 
+            'crop':crop, 'rotation':rotation, 'filtering':filtering, 'sigma':sigma}
+
+    if hdf5_use:
+        if hdf5_signature is not None:
+            signature = signature0.copy()
+            for key, item in hdf5_signature.iteritems():
+                signature[key] = item
+        hdf5_data = mhdf5.RootHdf5(root_dir, pattern, signature)
+        if not hdf5_data.is_row_images:
+            images, imageNumbers = _collect_images(signature0)
+            hdf5_data.save_row_images(images, imageNumbers)
+        else:
+            print("Loading data from hdf5 file")
+            images, imageNumbers = hdf5_data.load_row_images()
+    else:
+        images, imageNumbers = _collect_images(signature0)
+
+    
     if subtract is not None:
         # TODO: fix the way the gray level is renormalized
         # This is too rude!
         images = images[subtract+1:] - images[subtract] + np.int(np.mean(images[subtract]))
         imageNumbers = imageNumbers[subtract+1:]
     assert len(images) == len(imageNumbers)
-    return images, imageNumbers
+    
+    if hdf5_use:
+        return images, imageNumbers, hdf5_data
+    else:
+        return images, imageNumbers
 
 
 

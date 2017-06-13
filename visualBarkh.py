@@ -25,6 +25,7 @@ from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
 from mokas_domains import Domains
 
+
 # Check if pycuda is available
 try:
     import pycuda.driver as driver
@@ -122,6 +123,9 @@ class StackImages:
     imCrop : 4-element tuple
        Crop the image
 
+    hdf5_signature : dict
+        A dictionary containing the essential data to identify a measurement
+        if None, the code does not save data on a hdf5
     """
 
     def __init__(self, subDirs, pattern, resize_factor=None,
@@ -134,7 +138,9 @@ class StackImages:
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
                  exclude_switches_out_of_final_domain=True,
-                 rotation=None, fillValue=-1):
+                 rotation=None, fillValue=-1, 
+                 hdf5_use=False, 
+                 hdf5_signature=None):
         """
         Initialized the class
         """
@@ -166,7 +172,8 @@ class StackImages:
         self.pattern = pattern
         self.fillValue = fillValue
         #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
-        self.NNstructure = np.ones((3,3))
+        NN = 3
+        self.NNstructure = np.ones((NN,NN))
         if boundary == 'periodic':
             self.boundary = 'periodic'
         else:
@@ -183,11 +190,13 @@ class StackImages:
             sys.exit()
 
         #############################################################################
-        #self.Array = self.collect_images(pattern, firstIm, lastIm, resize_factor, imCrop, 
-        #    filtering, sigma)
-        self.Array, self.imageNumbers = \
-        collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, imCrop, rotation, filtering, sigma, subtract=subtract)
-
+        out = collect_images.images2array(self._mainDir, pattern, firstIm, lastIm, imCrop, 
+                                    rotation, filtering, sigma, subtract=subtract, 
+                                    hdf5_use=hdf5_use, hdf5_signature=hdf5_signature)
+        if hdf5_use:
+            self.Array, self.imageNumbers, self.hdf5 = out
+        else:
+            self.Array, self.imageNumbers = out
         ##############################################################################
         self.shape = self.Array.shape
         self.n_images, self.dimX, self.dimY = self.shape
@@ -196,10 +205,8 @@ class StackImages:
         self.multiplier = self._get_multiplier('bubble')
         self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
-        #self.kernel = kernel.get_kernel(kernel_half_width_of_ones, kernel_internal_points, start = kernel_start)
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
-        #self.kernel_internal_points = kernel_internal_points
-        #self.kernel_switch_position = kernel_switch_position
+        
 
     def _get_multiplier(self, method='average_gray'):
         """
@@ -808,6 +815,7 @@ class StackImages:
             ax.set_title(title)
         if ylabel:
            ax.set_ylabel(ylabel)
+        ax.set_xlim(0, ax.get_xlim()[1])
         # Set the colors
         for thisfrac, thispatch in zip(central_points, patches):
             c = self._colorMap(self.norm(thisfrac))
@@ -959,7 +967,7 @@ class StackImages:
         return im, n_cluster
         
     def showRawAndCalcImages(self, nImage=None, preAvalanches=True, \
-        isTwoImages=False, subtract_first_image=False,autoscale=False):
+        isTwoImages=False, subtract_first_image=False, autoscale=False):
         """
         show the Raw and the Calculated image n
         Automatically increases the values of the image
@@ -1016,8 +1024,9 @@ class StackImages:
                 self.isTwoImages = isTwoImages
             self.ax0_axis = None
         # Prepare the color map of calculated avalanches
-        switchTimes_images = self._getSwitchTimesOverThreshold(False, fillValue=0).\
-            reshape(self.dimX, self.dimY) == self.nImage
+        #switchTimes_images = self._getSwitchTimesOverThreshold(False, fillValue=0).\
+        #    reshape(self.dimX, self.dimY) == self.nImage
+        switchTimes_images = self._switchTimes2D == self.nImage      
         contours = measure.find_contours(switchTimes_images*100, 1)
         cl = self._pColors[self.nImage - self.min_switch]
         #myMap = mpl.colors.ListedColormap([(0,0,0),cl],'mymap',2)
@@ -1109,9 +1118,9 @@ class StackImages:
         if preAvalanches:
             w = self._getSwitchTimesOverThreshold(False, fillValue=self.fillValue).reshape(self.dimX, self.dimY) 
             white = (w < self.nImage) & (w > 0)
-            im = im + white * (max(im.flatten()) + 1)
+            imOut = im + white * (max(im.flatten()) + 1)
             myPalette = myPalette + [(1,1,1)] # Add white to the palette
-        ax2.imshow(im, mpl.colors.ListedColormap(myPalette))      
+        ax2.imshow(imOut, mpl.colors.ListedColormap(myPalette))      
         #plt.imshow(switchTimes_images, mapGreyandBlack)
         if not isTwoImages:
             ax2.grid(color='blue',ls="-")
@@ -1131,6 +1140,10 @@ class StackImages:
         msg = "Avalanche %i: %i pixels (%.2f %% of the image)" % \
               (self.nImage, size, float(size)/(self.dimX*self.dimY)*100)
         print(msg)
+        self.im0 = im
+        sub_cluster_sizes = sorted([np.sum(im==i) for i in range(1, n_clusters+1)], reverse=True)
+        print(sub_cluster_sizes)
+        print("Cluster sizes: " + ", ".join([str(size) for size in sub_cluster_sizes if size>1]))
         if not self.isConnectionRawImage:
             self.figRawAndCalc.canvas.mpl_connect('key_press_event', self._show_next_raw_image)
             self.isConnectionRawImage = True
@@ -1806,7 +1819,7 @@ class StackImages:
         switches = sorted(self.bubbles.keys())
         rescale_factors = {}
         area0 = float(np.sum(self.bubbles[switches[-1]]))
-        print area0
+        print(area0)
         for switch in switches[:-1]:
             resize_factor = (np.sum(self.bubbles[switch])/area0)**0.5
             print(resize_factor)

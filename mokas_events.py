@@ -66,10 +66,6 @@ class PlotEventsAndCluster:
     """
     class for plotting
     """
-
-
-
-
     def plot_size_distributions(self, events_sizes, cluster_sizes):
         fig, axs = plt.subplots(1, 1) # Distributions of events and clusters
         fig.suptitle(self.title, fontsize=30)
@@ -129,7 +125,8 @@ class EventsAndClusters():
             print("Done")
         self.set_init_time = set_init_time
         if NNstructure is None:
-            self.NNstructure = np.ones((3,3))
+            NN = 3
+            self.NNstructure = np.ones((NN,NN))
         else:
             self.NNstructure = NNstructure
         if post_processing and row_data2D is not None:
@@ -192,8 +189,6 @@ class EventsAndClusters():
         I : the clusters are calculated using the limits (cluster_limits) calculated elsewhere
         using a threshold
         II : add the switches between the end and the start of a cluster which are below the threshold
-
-
         """
         print("Using the limits")
         cluster2D = np.copy(self.switch2D)
@@ -250,11 +245,6 @@ class EventsAndClusters():
                         cluster2D[cluster] = sw_fin
                 main_cluster_size = size_cluster # update the largest cluster size
 
-            # im = np.logical_and((self.switch2D >=x0),(self.switch2D <=x1))
-            # if self.set_init_time:
-            #     cluster2D[im] = x0
-            # else:
-            #     cluster2D[im] = x1
         return cluster2D
 
 
@@ -315,7 +305,7 @@ class EventsAndClusters():
 
     def plot_maps(self, cmap='pastel', zoom_in_data=True, 
                     fig=None, axs=None, title=None,
-                    with_cluster_number=True):
+                    with_cluster_number=False):
 
         if not self.is_events_and_clusters:
             self.get_events_and_clusters()
@@ -326,7 +316,9 @@ class EventsAndClusters():
             if cmap == 'pastel':
                 clrs = (clrs + [1,1,1])/2
             clrs[0] = [0,0,0]
-            cmap = mpl.colors.ListedColormap(clrs)
+            self.cmap = mpl.colors.ListedColormap(clrs)
+        else:
+            self.cmap = cmap
 
         if zoom_in_data:
             rows_mean_sw = np.mean(self.switch2D, axis=1)
@@ -350,9 +342,11 @@ class EventsAndClusters():
             ax0, ax1 = axs[0], axs[1]
         else:
             ax0, ax1 = axs
-        ax0.imshow(switch2D, cmap=cmap)
-        ax1.imshow(cluster2D, cmap=cmap)
-        font = {'weight': 'normal', 'size': 12}
+        ax0.imshow(switch2D, cmap=self.cmap)
+        ax1.imshow(cluster2D, cmap=self.cmap)
+        rows, cols = cluster2D.shape
+        ax0.axis((0,cols,rows,0))
+        font = {'weight': 'normal', 'size': 8}
         for i in cluster_switches:
             cluster = cluster2D == i
             cnts = measure.find_contours(cluster, 0.5)
@@ -361,10 +355,12 @@ class EventsAndClusters():
                 for ax in [ax0, ax1]:
                     ax.plot(X, Y, c='k', antialiased=True, lw=1)
             if with_cluster_number:
-                yc, xc = nd.measurements.center_of_mass(cluster)
+                # Calculate the distance map and find the indexes of the max
+                d = mahotas.distance(cluster)
+                yc, xc = np.unravel_index(d.argmax(), d.shape)
+                # print("cluster %i: (%i, %i)" % (i, xc, yc))
                 ax1.text(xc, yc, str(i), horizontalalignment='center',
                     verticalalignment='center', fontdict=font)
-
         if title:
             fig.suptitle(title, fontsize=30)
 
