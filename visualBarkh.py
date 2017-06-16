@@ -99,7 +99,7 @@ class StackImages:
        These numbers refer to the numbers of the filenames
     
     subDirs : list
-       list of subdirectories so save the data into (hdf5 style)
+       list of subdirectories to save the data into (hdf5 style)
 
     resize_factor : int, opt
        Reducing factor for the size of raw images
@@ -985,10 +985,10 @@ class StackImages:
         isTwoImages: bool
         if True shows only two images, the raw+1 and the calculated one
         """
-        if self._switchTimes == None:
+        if self._switchTimes is None:
             print("Need to calculate the color image first")
             return
-        if nImage == None:
+        if nImage is None:
             self.nImage = self._switchTimesUnique[0]
             print("Starting from image %i" % self.nImage)
         elif nImage not in self._switchTimesUnique:
@@ -1710,7 +1710,7 @@ class StackImages:
         ax.plot(X, Y, 'k', antialiased=True, lw=2)
         self.sw = self.domain.sw[:self.domain.max_switch]
         for k, switch in enumerate(self.sw):
-            print(switch)
+            #print(switch)
             q = self._switchTimes2D == switch
             q = q + central_domain
             labeled, n_cluster = mahotas.label(q, self.NNstructure)
