@@ -9,12 +9,19 @@ import pandas as pd
 from skimage import measure
 import heapq
 import mokas_cluster_methods as cmet
+import mahotas
 
 
 class Clusters:
 
-    def __init__(self, hdf5_filename, group, n_experiments, 
-                motion='downward'):
+    def __init__(self, hdf5_filename, group, n_experiments, min_size=5,
+                skip_first_clusters=0, motion='downward'):
+        """
+        it is important to set a min_size of the cluster. 
+        The value of 10 seems reasonable, but can larger
+        """
+        self.min_size = min_size
+        self.skip_first_clusters = skip_first_clusters
         self._fname = hdf5_filename
         p, filename = os.path.split(hdf5_filename)
         filename, ext = os.path.splitext(filename)
@@ -33,74 +40,92 @@ class Clusters:
         self.Axy_types = ['0000', '0100', '1000','1100']
         self.colors = {'0000': 'r', '1000': 'b', '0100': 'c', '1100': 'g'}
         self.cluster_data = OrderedDict()
-        self.get_experiment_stats(skip_first_clusters=1)
-        self.get_global_stats()
-        self.plot_global_stats(10)
+        if motion == 'downward':
+            self.direction = 'Bottom_to_top'
 
-    def get_experiment_stats(self, direction='Bottom_to_top', skip_first_clusters=1):
+
+    def get_experiment_stats(self):
         print("Get the statistics for each experiment")
         ######################################
         for n_exp in self.cluster2D:
             print("Experiment: %i" % n_exp)
             cluster_types = []
             cluster_sizes = []
+            switches = []
             angles_left = []
             angles_right = []
             curvature = []
-            largest_sizes = []
             l_up = []
             l_down = []
+            l_linear = []
             self.cluster_data[n_exp] = pd.DataFrame()
             cluster2D = self.cluster2D[n_exp]
-            switches = np.unique(cluster2D)[skip_first_clusters:]
+            cluster_switches = np.unique(cluster2D)[self.skip_first_clusters:]
             cluster = np.zeros_like(cluster2D).astype(bool)
-            for switch in switches:
+            for switch in cluster_switches:
+                print(switch)
                 cluster0 = cluster2D == switch
-                cluster_type = gal.getAxyLabels(cluster0, direction, 1)[0]
+                cluster_type = gal.getAxyLabels(cluster0, self.direction, 1)[0]
                 # We need to check if the cluster is touching the top/bottom edge
+                # i.e. we check the last two elements of the cluster_type
                 if '1' in cluster_type[2:]:
-                    switches = switches[switches<switch]
-                    break
-                cluster_types.append(cluster_type)
-                size = np.sum(cluster0)
-                cluster_sizes.append(size)
-                #print(n_exp, switch, cluster_type)
-                cluster += cluster0
-                angle_left, angle_right = self.get_angles(cluster)
-                angles_right.append(angle_right)
-                angles_left.append(angle_left)
-                # Get and plor the curvature
-                cnts = self._select_contour(cluster)
-                X, Y = cnts[:,1], cnts[:,0]
-                z = np.polyfit(X, Y, 2)
-                curvature.append(-1./z[0])
-                # Calculate the lengths
-                im, largest_size = cmet.largest_cluster(cluster0, NNstructure=np.ones((3,3)))
-                largest_sizes.append(largest_size)
-                l0, l1, im_corners = cmet.get_upper_and_lower_contour(cluster0, self.motion, self.ref_point)
-                l0, cv = cmet.get_lenght_and_curvature(l0)
-                l1, cv = cmet.get_lenght_and_curvature(l1)
-                l_up.append(l0)
-                l_down.append(l1)
+                        break
+                # Here there is a problem
+                # Cluster0 can be made of 2 or more subclaster (this is not uncommon)
+                # So we need to loop over the sub_clusters
+                sub_clusters, n_sub_clusters = mahotas.label(cluster0, np.ones((3,3)))
+                for label in range(1, n_sub_clusters+1):
+                    sub_cluster = sub_clusters == label
+                    print("Sub_cluster n. %i" % label)
+                    size = np.sum(sub_cluster)
+                    if size < self.min_size:
+                        continue
+                    # Check again the cluster_type
+                    sub_cluster_type = gal.getAxyLabels(sub_cluster, self.direction, 1)[0]
+                    cluster_types.append(sub_cluster_type)
+                    cluster_sizes.append(size)
+                    switches.append(switch)
+                    #print(n_exp, switch, cluster_type)
+                    # Calculate the lengths of the subcluster
+                    # L is the linear distance between the 
+                    self.sub_cluster = sub_cluster
+                    l0, l1, L_linear = cmet.get_upper_and_lower_contour(sub_cluster, sub_cluster_type,
+                                                self.ref_point, motion=self.motion)
+                    l0, cv = cmet.get_lenght_and_curvature(l0)
+                    l1, cv = cmet.get_lenght_and_curvature(l1)
+                    l_up.append(l0)
+                    l_down.append(l1)
+                    l_linear.append(L_linear)
+                    # Update the large cluster and calculate the properties
+                    cluster += sub_cluster
+                    angle_left, angle_right = self.get_angles(cluster)
+                    angles_right.append(angle_right)
+                    angles_left.append(angle_left)
+                    # Get and plor the curvature
+                    cnts = self._select_contour(cluster)
+                    X, Y = cnts[:,1], cnts[:,0]
+                    z = np.polyfit(X, Y, 2)
+                    curvature.append(-1./z[0])
+                    
             self.cluster_data[n_exp]['switches'] = switches
             self.cluster_data[n_exp]['types'] = cluster_types
             self.cluster_data[n_exp]['sizes'] = cluster_sizes
             self.cluster_data[n_exp]['angles_left'] = angles_left
             self.cluster_data[n_exp]['angles_right'] = angles_right
             self.cluster_data[n_exp]['curvature'] = curvature
-            self.cluster_data[n_exp]['largest_sizes'] = largest_sizes
             self.cluster_data[n_exp]['l_up'] = l_up
             self.cluster_data[n_exp]['l_down'] = l_down
+            self.cluster_data[n_exp]['l_linear'] = l_linear
             
-    def plot_global_stats(self, min_size=0):
+    def plot_global_stats(self):
         # Do it only after exp and global stats
         fig, axs = plt.subplots(2,2)
-        q = self.all_clusters[self.all_clusters.sizes>min_size]
+        q = self.all_clusters
         # Plot the hist of the curvature
         ax = axs[0,0]
         c = q.curvature
         n, bins, patches = ax.hist(c, bins=100, facecolor='green', alpha=0.75)
-        ax.set_xlabel("Radio of Curvature")
+        ax.set_xlabel("Radius of Curvature")
         ax.set_title(r'$\mathrm{R Curvature:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
         # Plot the pie
         ax = axs[0,1]
@@ -170,7 +195,7 @@ class Clusters:
         l_values = heapq.nlargest(2, lens)
         i0, i1 = [lens.index(l) for l in l_values]
         if l_values[0] == l_values[1]:
-            i1 = len(lengths) - 1 - lengths[::-1].index(l_values[0])
+            i1 = len(lens) - 1 - lens[::-1].index(l_values[0])
         Y0, Y1 = cnts[i0][:,0], cnts[i1][:,0]
         m0, m1 = np.mean(Y0), np.mean(Y1)
         if m0 > m1:
@@ -198,4 +223,7 @@ if __name__ == "__main__":
             print("Chech the path")
             sys.exit()
         n_experiments = range(1,2)
-        clusters = Clusters(fname, grp0, n_experiments)
+        clusters = Clusters(fname, grp0, n_experiments, skip_first_clusters=1, min_size=10)
+        clusters.get_experiment_stats()
+        clusters.get_global_stats()
+        #clusters.plot_global_stats()

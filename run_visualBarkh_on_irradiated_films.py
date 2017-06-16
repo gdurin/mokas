@@ -196,19 +196,19 @@ if __name__ == "__main__":
             #imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"
             # Loading ok, beautiful growth
             # On Genesis
-            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.232A"
-            #imParameters['pattern'] = "02_Irr_800uC_0.232A_MMStack_Pos0.ome.tif"
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.232A"
+            imParameters['pattern'] = "02_Irr_800uC_0.232A_MMStack_Pos0.ome.tif"
             # On wswall
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.232A_700ms"
-            imParameters['pattern'] = "02_Irr_16e8He+_0.232A_700ms_MMStack_Pos0.ome.tif"
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.116A_3s"
-            imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"
-            crop_upper_left_pixel, crop_lower_right_pixel = (100,50), (1200,1020)
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.232A_700ms"
+            #imParameters['pattern'] = "02_Irr_16e8He+_0.232A_700ms_MMStack_Pos0.ome.tif"
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/02_Irr_16e8He+_0.116A_3s"
+            #imParameters['pattern'] = "02_Irr_16e8He+_0.116A_3s_MMStack_Pos0.ome.tif"
+            #crop_upper_left_pixel, crop_lower_right_pixel = (100,50), (1200,1020)
             #imParameters['imCrop'] = (200,1040,500,1390)
             #imParameters['imCrop'] = (270,970,200,950) # good for 01 0.16A
             #crop_upper_left_pixel, crop_lower_right_pixel = (270,120), (1100,920) # Good for n=03, current=15
             #crop_upper_left_pixel, crop_lower_right_pixel = (200,80), (1200,1020) # Good for n=01, current=15
-            imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+            #imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
             imParameters['imCrop'] = None
             #imParameters['pattern'] = "Irr_800He+_0.1A_2fps_MMStack_Pos0.ome.tif_MMStack_Pos0.ome.tif" 
             #imParameters['pattern'] = "05_Irr_8e8He+_0.1A_2fps_MMStack_Pos0.ome.tif"
@@ -232,6 +232,7 @@ if __name__ == "__main__":
             imParameters['subtract'] = None # Subtract a reference image
             threshold = None
             palette = 'coolwarm'
+            erase_small_events_percent = None
         elif k[3:] == "NonIrr_0.095A_3s":
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/"
             rootDir = os.path.join(rootDir, k)
