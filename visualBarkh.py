@@ -24,6 +24,8 @@ import collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
 from mokas_domains import Domains
+import cPickle as pickle
+from skimage import measure
 
 
 # Check if pycuda is available
@@ -967,7 +969,7 @@ class StackImages:
         return im, n_cluster
         
     def showRawAndCalcImages(self, nImage=None, preAvalanches=True, \
-        isTwoImages=False, subtract_first_image=False, autoscale=False):
+        isTwoImages=False, subtract_first_image=True, autoscale=False):
         """
         show the Raw and the Calculated image n
         Automatically increases the values of the image
@@ -1655,7 +1657,7 @@ class StackImages:
                         consider_events_around_a_central_domain=True,
                         initial_domain_region=None, remove_bordering=False,
                         plot_centers_of_mass = False, reference=None,
-                        rescale_area=False, plot_rays=True,
+                        rescale_area=False, plot_rays=False,
                         fig=None, ax=None, title=None):
         """
         Find the contours of the sequence of DW displacements
@@ -1833,6 +1835,7 @@ class StackImages:
             ax.legend(bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0.)
         return
 
+
     def waiting_times_map(self, is_plot=True, log_norm=True):
         """
         calculate and plot the waiting time matrix
@@ -1866,3 +1869,16 @@ class StackImages:
         self.waiting_times_hist = waiting_times_hist
         return
 
+
+    def pickle_switchMap2D(self, data=None, mainDir=None):
+        """
+        save the array ._switchTimes2D in pickle format in the same 
+        folder where the images are taken from
+        """
+        if data is None:
+            data = self._switchTimes2D
+        
+        filename = os.path.join(self._mainDir,'switchMap2D.pkl')
+        with open (filename, 'wb') as f:
+            pickle.dump(data, f)
+        return      
