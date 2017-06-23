@@ -6,7 +6,7 @@ import skimage.feature as feature
 from skimage import measure
 import matplotlib.pyplot as plt
 import heapq
-import getAxyLabels as gal
+
 
 
 k0 = np.array([0,0,1,1,1,0,0])
@@ -14,9 +14,14 @@ k1 = np.array([0,1,0,0,0,1,0])
 kc =  np.array([1,0,0,0,0,0,1])
 kernel = np.vstack((k0,k1,kc,kc,kc,k1,k0))
 
-n_corners = {'0000':2, }
+#n_clusters_as_type = {'0000': 2, '0100':1, }
 
-def get_lenght_and_curvature(line):
+def get_length(line):
+    x, y = line[:,1], line[:,0]
+    length = np.sum(((x[1:]-x[:-1])**2 + (y[1:]-y[:-1])**2)**0.5)
+    return length
+
+def get_length_and_curvature(line):
     """
     Meausure the length of a contour line
     in pixel units
@@ -24,11 +29,11 @@ def get_lenght_and_curvature(line):
     """
     try:
         x, y = line[:,1], line[:,0]
-        lenght = np.sum(((x[1:]-x[:-1])**2 + (y[1:]-y[:-1])**2)**0.5)
+        length = get_length(line)
         curvature, b, c = np.polyfit(x, y, 2)
     except TypeError:
         return None, None
-    return lenght, -curvature
+    return length, -curvature
     
 
 def largest_cluster(im, NNstructure=None):
@@ -136,7 +141,7 @@ def _non_maximal_suppression(im_corners, cluster, NN=3):
     return corners_rows[i], corners_cols[i]
 
 def get_corner_index(im_corners, cnt_cluster):
-    cnt_corner = measure.find_contours(im_corners, 0.5)[0]
+    cnt_corner = measure.find_contours(im_corners, 0.5, fully_connected='low')[0]
     # Create a string for the coordinates
     cnt_cluster_2_string = np.array(["%s,%s" % (x,y) for x,y in cnt_cluster])
     cnt_corner_2_string = np.array(["%s,%s" % (x,y) for x,y in cnt_corner])
@@ -150,6 +155,21 @@ def get_corner_index(im_corners, cnt_cluster):
     corner_string = matching_points[index_matching_point]
     corner_index = np.argwhere(cnt_cluster_2_string==corner_string)[0][0]
     return corner_index
+
+def get_contours(cluster, cluster_type, threshold=0.5, connection='low'):
+    cnts_cluster = measure.find_contours(cluster, threshold, fully_connected=connection)
+    if cluster_type != '1100':
+        if len(cnts_cluster) > 1:
+            # If there are several contours, keep the longest
+            lens = np.array([len(cnt) for cnt in cnts_cluster])
+            i0 = np.argmax(lens)
+            # We need to 
+            return cnts_cluster[i0], cluster
+        else:
+            #print(len(cnts_cluster))
+            return cnts_cluster[0], cluster
+    else:
+        return cnts_cluster, cluster
 
 def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='downward',
                                 n_fast=12, threshold_fast=0.1, test=False):
@@ -189,6 +209,7 @@ def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='d
     test : bool
         Plot the contours to test
     """
+    failure = [np.NaN, np.NaN, np.NaN, False]
     im, n_clusters = mahotas.label(cluster, np.ones((3,3)))
     if n_clusters != 1:
         raise ValueError("The cluster is made of sub_clusters, which is not permitted here")
@@ -197,40 +218,60 @@ def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='d
         ref_point = 0, cols/2
     cluster = morph.remove_small_holes(cluster)
     # Find the contour
-    cnts_cluster = measure.find_contours(cluster,0.5, fully_connected='high')
-    # Find the corners
-    cf = feature.corner_fast(cluster, n_fast, threshold_fast)
-    im_cf, n_clusters_cf = mahotas.label(cf, np.ones((3,3)))
-    print(n_clusters_cf, cluster_type, np.sum(im_cf))
-    if n_clusters_cf > 2:
-        print("Too many corners")
-        return 3*[np.NaN]
-    elif not n_clusters_cf:
-        print("No corners found")
-        return 3*[np.NaN]
-    if cluster_type == '0000':
-        i_corners = []
-        if n_clusters_cf != 2:
-            return 3*[np.NaN]
-        assert len(cnts_cluster) == 1
-        cnt_cluster = cnts_cluster[0]
-        for i in range(2):
-            corner_index = get_corner_index(im_cf==i+1, cnt_cluster)
-            if corner_index is None:
-                break
-            i_corners.append(corner_index)
-        # 5. Split the cluster contour in two sub-arrays
-        i0, i1 = np.sort(i_corners)
-        cnt_cluster_rolled = np.roll(cnt_cluster, len(cnt_cluster)-i0, axis=0)
-        l0, l1 = cnt_cluster_rolled[:i1-i0+1], cnt_cluster_rolled[i1-i0:]
-    elif cluster_type == '1000' or cluster_type == '0100':
-        assert n_clusters == 1 and len(cnts_cluster) == 1
-        cnt_cluster = cnts_cluster[0]
-        i0 = get_corner_index(im_cf, cnt_cluster)
-        l0, l1 = cnt_cluster[:i0+1], cnt_cluster[i0:]
-    elif cluster_type == '1100':
-        assert len(cnts_cluster) == 2
-        l0, l1 = cnts_cluster[0], cnts_cluster[1]
+    #cnts_cluster = measure.find_contours(cluster,0.5, fully_connected='high')
+    cnt_cluster, cluster = get_contours(cluster, cluster_type, connection='low')
+    if cluster_type == '1100':
+        l0, l1 = cnt_cluster[0], cnt_cluster[1]
+    else:
+        # It is better to close the contour for the 01 and 10 clusters
+        if cluster_type[1] == '1':
+            cnt_cluster = np.vstack((cnt_cluster, cnt_cluster[0]))
+        elif cluster_type[0] == '1':
+            cnt_cluster = np.vstack((cnt_cluster[-1], cnt_cluster))
+        # This is a fantastic method to get the cluster pixels inside the contour only!
+        cluster = measure.grid_points_in_poly(cluster.shape, cnt_cluster)
+        # Find the corners
+        cf = feature.corner_fast(cluster, n_fast, threshold_fast)
+        im_cf, n_clusters_cf = mahotas.label(cf, np.ones((3,3)))
+        if n_clusters_cf > 2:
+            print("Too many corners")
+            return failure
+        elif not n_clusters_cf:
+            print("No corners found")
+            print(n_clusters_cf, cluster_type, np.sum(im_cf))
+            return failure
+        ##########################################################
+        if cluster_type == '0000':
+            i_corners = []
+            if n_clusters_cf != 2:
+                print("Only %i corner(s)" % n_clusters_cf)
+                return [np.NaN, np.NaN, np.NaN, False]
+            for i in range(2):
+                corner_index = get_corner_index(im_cf==i+1, cnt_cluster)
+                if corner_index is None:
+                    return failure
+                i_corners.append(corner_index)
+            # 5. Split the cluster contour in two sub-arrays
+            i0, i1 = np.sort(i_corners)
+            cnt_cluster_rolled = np.roll(cnt_cluster, len(cnt_cluster)-i0, axis=0)
+            l0, l1 = cnt_cluster_rolled[:i1-i0+1], cnt_cluster_rolled[i1-i0:]
+        elif cluster_type == '1000' or cluster_type == '0100':
+            if n_clusters_cf > 1:
+                sizes = mahotas.labeled.labeled_size(im_cf)[1:]
+                i = np.argmax(sizes) + 1
+                im_cf = im_cf == i
+            i0 = get_corner_index(im_cf, cnt_cluster)
+            if i0 is None:
+                # try to get rid of small objects
+                cluster = morph.remove_small_objects(cluster)
+                cnt_cluster, cluster = get_contours(cluster, cluster_type, connection='low')
+                # Find the corners
+                cf = feature.corner_fast(cluster, n_fast, threshold_fast)
+                im_cf, n_clusters_cf = mahotas.label(cf, np.ones((3,3)))
+                i0 = get_corner_index(im_cf, cnt_cluster)
+            l0, l1 = cnt_cluster[:i0+1], cnt_cluster[i0:]
+    
+    ####################################
     try:
         l0_distance = mean_distance(l0, ref_point)
         l1_distance = mean_distance(l1, ref_point)
@@ -239,13 +280,15 @@ def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='d
     if motion == 'downward' and (l0_distance > l1_distance):
         l0, l1 = l1, l0
     l_linear = mean_distance(l0[0],l0[-1]) #Isn't nice?   
-    if test:
+    success = True
+    if test and '11' == cluster_type[:2]:
         fig, ax = plt.subplots(1,1)
-        ax.imshow(cluster, 'gray')
+        ax.imshow(cluster, 'gray', interpolation='nearest')
         ax.plot(l0[:,1],l0[:,0],'oy', label='start')
         ax.plot(l1[:,1],l1[:,0],'ob', label='end')
         axs = 0.9*np.min(l1[:,1]), 1.1*np.max(l1[:,1]), 1.1*np.max(l1[:,0]), 0.9*np.min(l1[:,0])
         ax.axis(axs)
         ax.legend()
-    return l0, l1, l_linear
+        plt.show()
+    return l0, l1, l_linear, success
 

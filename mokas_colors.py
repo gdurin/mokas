@@ -19,6 +19,34 @@ def get_ral_colors():
     ral_colors = np.concatenate((ral_colors, ral_colors))
     return ral_colors
 
+def get_liza_colors(color='green', whiter=0.6):
+    black = (0,0,0)
+    if color == 'green':
+        c10 = mpl_colors.hex2color("#204A20")
+        c11 = mpl_colors.hex2color("#548e72")
+        c01 = mpl_colors.hex2color("#377D2C")
+        c00 = mpl_colors.hex2color("#1B2E34")
+        #c00 = [0.5*(c+wc) for c in c00]
+    elif color == 'red':
+        c00 = mpl_colors.hex2color("#770811")
+        c01 = mpl_colors.hex2color("#727681")
+        c10 = mpl_colors.hex2color("#827A74")
+        c11 = mpl_colors.hex2color("#4e443c")
+    elif color == 'blue':
+        c00 = mpl_colors.hex2color("#1C1F39")
+        c01 = mpl_colors.hex2color("#CBA465")
+        c10 = mpl_colors.hex2color("#7E6647")
+        c11 = mpl_colors.hex2color("#356975")
+        if whiter is not None:
+            c00 = [0.5*(c+whiter) for c in c00]    
+    if whiter is not None:
+        c10 = [0.5*(c+whiter) for c in c10]
+        c01 = [0.5*(c+whiter) for c in c01]
+        c11 = [0.5*(c+whiter) for c in c11]
+
+    clrs = [black, c00, c01, c10, c11]
+    return clrs, mpl_colors.ListedColormap(clrs,'liza_'+color)
+
 
 def get_cmap(N, cmap='hsv'):
     """Returns a function that maps each index 

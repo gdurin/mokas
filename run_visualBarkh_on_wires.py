@@ -60,8 +60,6 @@ class RunWires:
         self.figs.append(self.fig2)
         self.fig3, self.axs3 = plt.subplots(cols1, 2*rows1, sharex=True, sharey=True, squeeze=False) # events and clusters
         self.figs.append(self.fig3)
-        self.fig4, self.axs4 = plt.subplots(1, 2, sharex=True, sharey=True, squeeze=False) # Sizes vs lenghts
-        self.figs.append(self.fig4)
         #for n in range(self.n_experiments):
         allParameters = self.wireParameters.copy()
         for n, experiment in enumerate(self.experiments):
@@ -91,44 +89,11 @@ class RunWires:
             # imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
             #                          invert_y_axis=False, plot_rays=False,
             #                          fig=self.fig3, ax=self.axs3[n], title=title)
-            imArray.get_stats_prop()
+            #imArray.get_stats_prop()
             imArray.plotEventsAndClusters(cluster_threshold=30, fig=self.fig3, axs=(self.axs3[n,0], self.axs3[n,1]), 
                                             title=title, with_cluster_number=True)
             imArray.cluster2D = imArray.events_and_clusters.cluster2D
-            if n == 0:
-                self.sizes = imArray.stats_prop['sizes']
-                self.lenghts_initial = imArray.stats_prop['lenghts_initial']
-                self.lenghts_final = imArray.stats_prop['lenghts_final']
-                self.curvatures_initial = imArray.stats_prop['curvatures_initial']
-                self.curvatures_final = imArray.stats_prop['curvatures_final']
-            else:
-                self.sizes = np.concatenate((imArray.stats_prop['sizes'], self.sizes))
-                self.lenghts_initial = np.concatenate((imArray.stats_prop['lenghts_initial'], self.lenghts_initial))
-                self.lenghts_final = np.concatenate((imArray.stats_prop['lenghts_final'], self.lenghts_final))
-                self.curvatures_initial = np.concatenate((imArray.stats_prop['curvatures_initial'], self.curvatures_initial))
-                self.curvatures_final = np.concatenate((imArray.stats_prop['curvatures_final'], self.curvatures_final))
-            #self.axs3[n].imshow(imArray.stats_prop['image_corners'])
-            # if plot_contours:
-            #     for switch in imArray.contours:
-            #         cnts_all = imArray.contours[switch]
-            #         for cnts in cnts_all:
-            #             X,Y = cnts[:,1], cnts[:,0]
-            #             self.axs3[0,n].plot(X, Y, c='k', antialiased=True, lw=1)
-            #     self.axs3[0,n].invert_yaxis()
-
-        # Out of the loop
-        average_lengths_i, average_sizes = self._get_averages(self.lenghts_initial, self.sizes)
-        self.axs4[0, 0].loglog(self.lenghts_initial, self.sizes, 'bo')
-        self.axs4[0, 0].loglog(average_lengths_i, average_sizes, 'ro')
-        self.axs4[0, 0].set_xlabel("Initial length", fontsize=24)
-        self.axs4[0, 0].set_ylabel("Size", fontsize=24)
-        self.axs4[0, 0].grid(True)
-        average_lengths_f, average_sizes = self._get_averages(self.lenghts_final, self.sizes)
-        self.axs4[0, 1].loglog(self.lenghts_final, self.sizes, 'bo')
-        self.axs4[0, 1].loglog(average_lengths_f, average_sizes, 'ro')
-        self.axs4[0, 1].set_xlabel("Final length", fontsize=24)
-        self.axs4[0, 1].set_ylabel("Size", fontsize=24)
-        self.axs4[0, 1].grid(True)
+                    
         suptitle = " - ".join(self.rootDir.split("/")[-2:])
         for fig in self.figs:
             fig.suptitle(suptitle, fontsize=30)

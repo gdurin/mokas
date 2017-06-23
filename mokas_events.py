@@ -373,6 +373,7 @@ if __name__ == "__main__":
     except:
         mtype = 'Irr16'
     NNstructure = np.ones((3,3))
+
     qq = np.array([[13, 13, 13,  8,  8,  3],
        [12, 14,  8,  6,  3,  3],
        [ 9,  4,  4,  4,  3, -1],
@@ -386,32 +387,40 @@ if __name__ == "__main__":
        [15,  9, 15,  2, -1, -1],
        [15, 15,  2, -1, -1, -1],
        [-1, 2, -1, -1, -1, -1]], dtype=np.int32)
-    filenamepkl = "switchTimes2D.pkl"
-    #filename = "switch2D_test.pkl"
-    if mtype == "NonIrr":
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr"
-        subDir = "NonIrr_0.095A_3s"
-        experiments = (1,2,4)
-    elif mtype == "Irr16":
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/"
-        subDir = "Irr_16e8He+_0.116A_3s"
-        experiments = (2,3,4,5,6,7,8,9,10)
-    events_sizes = np.array([])
-    cluster_sizes = np.array([])
-    cluster_durations = np.array([])
-    
-    for i in experiments:
-        sub_Dir = "%s_%s" % (str(i).rjust(2,"0"), subDir)
-        filename = os.path.join(rootDir, sub_Dir, filenamepkl)
-        events = Events(filename, NNstructure=NNstructure)
-        events.get_events_and_clusters()
-        events.plot_maps(title=sub_Dir)
-        events_sizes = np.concatenate((events_sizes, events.events_sizes))
-        cluster_sizes = np.concatenate((cluster_sizes, events.cluster_sizes))
-        cluster_durations = np.concatenate((cluster_durations, events.cluster_durations))
+    if False:
+        switch2D = qq2
+        avalanches = plot(switch2D, is_plot=True)
+        # This test is broken
+    else:
+        filenamepkl = "switchTimes2D.pkl"
+        #filename = "switch2D_test.pkl"
+        if mtype == "NonIrr":
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr"
+            subDir = "NonIrr_0.095A_3s"
+            experiments = (1,2,4)
+        elif mtype == "Irr16":
+            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/"
+            subDir = "Irr_16e8He+_0.116A_3s"
+            experiments = (2,3,4,5,6,7,8,9,10)
+        elif mytpe == "qq2":
+            pass
 
-    average_cluster_sizes, average_cluster_durations = events._get_average_clusters(cluster_sizes, cluster_durations)
-    title = "%s%s" % (str(experiments), subDir)
-    plotEvents = PlotEvents(title=title)
-    plotEvents.size_distributions(events_sizes, events.cluster_sizes)
-    plotEvents.average_size_vs_duration_of_clusters(average_cluster_durations, average_cluster_sizes)
+        events_sizes = np.array([])
+        cluster_sizes = np.array([])
+        cluster_durations = np.array([])
+        
+        for i in experiments:
+            sub_Dir = "%s_%s" % (str(i).rjust(2,"0"), subDir)
+            filename = os.path.join(rootDir, sub_Dir, filenamepkl)
+            events = EventsAndClusters(filename, NNstructure=NNstructure)
+            events.get_events_and_clusters()
+            events.plot_maps(title=sub_Dir)
+            events_sizes = np.concatenate((events_sizes, events.events_sizes))
+            cluster_sizes = np.concatenate((cluster_sizes, events.cluster_sizes))
+            cluster_durations = np.concatenate((cluster_durations, events.cluster_durations))
+
+        average_cluster_sizes, average_cluster_durations = events._get_average_clusters(cluster_sizes, cluster_durations)
+        title = "%s%s" % (str(experiments), subDir)
+        plotEvents = PlotEvents(title=title)
+        plotEvents.size_distributions(events_sizes, events.cluster_sizes)
+        plotEvents.average_size_vs_duration_of_clusters(average_cluster_durations, average_cluster_sizes)

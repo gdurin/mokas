@@ -244,7 +244,7 @@ class StackImages:
         check if image number n has been loaded
         and return the index of it in the Array
         """
-        ns = self.imageNumbers
+        ns = list(self.imageNumbers)
         try:
             if n < 0:
                 n = self.imageNumbers[n]
@@ -877,28 +877,34 @@ class StackImages:
         calling showRawAndCaldImages with the
         next available image
         """
+        dobj = {'event':self.showRawAndCalcEvents, 'cluster': self.showRawAndCalcClusters}
         key = str(event.key).lower()
-        print(event)
+
         self.ax0_axis = self.figRawAndCalc.axes[0].axis()
         if key != 'n' and key != 'p' and key!= "a":
             return
+        if self.data_type == 'event':
+            sw = self._switchTimesUnique
+            step = 1*(key=='n') -1*(key=='p')
+
+
         if key == "a":
-            outDir = os.path.join(imArray._mainDir, "Results")
+            outDir = os.path.join(self._mainDir, "Results")
             if not os.path.isdir(outDir):
                 os.mkdir(outDir)
             fname = "Raw_and_calc_%s.pdf" % self.nImage
             fname = os.path.join(outDir, fname)
             self.figRawAndCalc.savefig(fname)
             return
-        if self.nImage == self._switchTimesUnique[-1] and key == 'n':
+        if self.nImage == sw[-1] and key == 'n':
             print("No more images available")
             return
-        elif self.nImage == self._switchTimesUnique[0] and key == 'p':
+        elif self.nImage == sw[0] and key == 'p':
             print("No previous images available")
             return
-        step = 1*(key=='n') -1*(key=='p')
-        n = self._switchTimesUnique[np.nonzero(self._switchTimesUnique == self.nImage)[0][0] + step]
-        self.showRawAndCalcImages(n, isTwoImages=self.isTwoImages, subtract_first_image=self.subtract_first_image)
+        i, = np.nonzero(sw == self.nImage)
+        n = sw[i[0] + step]
+        dobj[self.data_type](n, isTwoImages=self.isTwoImages, subtract_first_image=self.subtract_first_image)
         return
     
     def saveRawAndCalcImages(self, frmt='pdf', isTwoImages=False):
@@ -965,8 +971,48 @@ class StackImages:
                 
             im, n_cluster = mahotas.labeled.relabel(im)
         return im, n_cluster
-        
-    def showRawAndCalcImages(self, nImage=None, preAvalanches=True, \
+
+    def showRawAndCalcClusters(self, nImage=None, preAvalanches=True, \
+        isTwoImages=False, subtract_first_image=False, autoscale=False):
+        # Check if cluster2D exists
+        try:
+            q = isinstance(self.cluster2D_start, object)
+        except AttributeError:
+            print("self.cluster2D does non exists yet. Run the appropriate code")
+            return
+        self.sw_clusters_start = np.unique(self.cluster2D_start)[1:]
+        self.sw_clusters.end = np.unique(self.cluster2D_end)[1:]
+        if nImage is None:
+            self.nImage = self.sw_clusters_start[0]
+            print("Starting from image %i" % self.nImage)
+        elif nImage not in sw_clusters_start:
+            print("No switch there")
+            i = np.argmin(abs(nImage - sw_clusters_start))
+            print("Closest values: %s " % " ".join([str(p) for p in sw_clusters_start[i-1:i+2]]))
+            return
+        else:
+            self.nImage = nImage
+        self.showRawAndCalcImages('cluster', nImage, preAvalanches, isTwoImages,
+                            subtract_first_image, autoscale)
+
+
+    def showRawAndCalcEvents(self, nImage=None, preAvalanches=True, \
+        isTwoImages=False, subtract_first_image=False, autoscale=False):
+        if self._switchTimes is None:
+            print("Need to calculate the color image first")
+            return
+        if nImage is None:
+            self.nImage = self._switchTimesUnique[0]
+            print("Starting from image %i" % self.nImage)
+        elif nImage not in self._switchTimesUnique:
+            print("No switch there")
+            return
+        else:
+            self.nImage = nImage
+        self.showRawAndCalcImages('event', nImage, preAvalanches, isTwoImages,
+                            subtract_first_image, autoscale)
+
+    def showRawAndCalcImages(self, data_type, nImage, preAvalanches=True, \
         isTwoImages=False, subtract_first_image=False, autoscale=False):
         """
         show the Raw and the Calculated image n
@@ -985,17 +1031,14 @@ class StackImages:
         isTwoImages: bool
         if True shows only two images, the raw+1 and the calculated one
         """
-        if self._switchTimes is None:
-            print("Need to calculate the color image first")
-            return
-        if nImage is None:
-            self.nImage = self._switchTimesUnique[0]
-            print("Starting from image %i" % self.nImage)
-        elif nImage not in self._switchTimesUnique:
-            print("No switch there")
-            return
-        else:
-            self.nImage = nImage
+        self.data_type = data_type
+        if data_type == 'event':
+            data = self._switchTimes2D
+            step_image = 1
+        elif data_type == 'cluster':
+            data = self.cluster2D_start
+            i, = np.where(self.sw_clusters_start==self.nImage)
+            step_image = self.cluster2D_end[i[0]] - (self.nImage - 1)
 
         # Subtract first image
         if subtract_first_image:
@@ -1024,10 +1067,8 @@ class StackImages:
                 self.isTwoImages = isTwoImages
             self.ax0_axis = None
         # Prepare the color map of calculated avalanches
-        #switchTimes_images = self._getSwitchTimesOverThreshold(False, fillValue=0).\
-        #    reshape(self.dimX, self.dimY) == self.nImage
-        switchTimes_images = self._switchTimes2D == self.nImage      
-        contours = measure.find_contours(switchTimes_images*100, 1)
+        switchTimes_images = data == self.nImage      
+        contours = measure.find_contours(switchTimes_images, 0.5)
         cl = self._pColors[self.nImage - self.min_switch]
         #myMap = mpl.colors.ListedColormap([(0,0,0),cl],'mymap',2)
         mapGreyandBlack = mpl.colors.ListedColormap([(0.75,0.75,0.75),(0,0,0)],'mymap',2) # in grey and black      
@@ -1044,15 +1085,15 @@ class StackImages:
             ax.xaxis.set_visible(False)
             ax.yaxis.set_visible(False)
         else:
-            for i in range(rows):
+            for i in range(2):
                 ax = axs[0,i]
-                #plt.subplot(2,3,1+i)
+                n0 = self.nImage - 1 + i * step_image
                 if self.subtract_first_image:
-                    im = self._imDiff((self.nImage-1+i,self.imageNumbers[0]))
+                    im = self._imDiff((n0,self.imageNumbers[0]))
                 else:
-                    im = self[self.nImage-1+i]
+                    im = self[n0]
                 ax.imshow(im, plt.cm.gray)
-                ax.set_title("Raw Image %i" % (self.nImage-1+i))
+                ax.set_title("Raw Image %i" % n0)
                 ax.grid(color='blue', ls="-")
         if autoscale:
             ax.axis((0, self.dimY, self.dimX, 0))
@@ -1075,9 +1116,9 @@ class StackImages:
             ax.set_title("Raw Image %s + Calculated Aval." % (self.nImage-1))        
             # Show the raw image difference
             ax = axs[1,0]
-            #plt.subplot(2,3,4)
-            ax.imshow(self._imDiff((self.nImage,self.nImage-1)), plt.cm.gray)
-            ax.set_title("Diff. Image %s and Image %s" % (self.nImage, self.nImage-1))
+            n0 = self.nImage - 1 + step_image
+            ax.imshow(self._imDiff((n0,self.nImage-1)), plt.cm.gray)
+            ax.set_title("Diff. Image %s and Image %s" % (n0, self.nImage-1))
             ax.grid(color='blue', ls="-")
             if autoscale:
                 ax.axis((0, self.dimY, self.dimX, 0))
@@ -1087,7 +1128,7 @@ class StackImages:
             # Show the raw difference images and the calculated avalanches
             ax1 = axs[1,1]
             #plt.subplot(2,3,5)
-            ax1.imshow(self._imDiff((self.nImage,self.nImage-1)), plt.cm.gray)
+            ax1.imshow(self._imDiff((n0,self.nImage-1)), plt.cm.gray)
             # Use find_contours
             for n, contour in enumerate(contours):
                 ax1.plot(contour[:, 1], contour[:, 0], linewidth=1, color='r')
@@ -1096,28 +1137,21 @@ class StackImages:
             elif self.ax0_axis is not None:
                 ax1.axis(self.ax0_axis)
         
-            # Use canny filter
-            #edges1 = skfilters.canny(switchTimes_images*1000, 1)
-            #myMap = mpl.colors.ListedColormap([(1,1,1),(1,1,0)],'mymap',2)
-            #plt.imshow(edges1, hold=True)
             ax1.set_title("Raw Diff and Calculated Aval.")
             ax1.grid(color='blue',ls="-")
         
         # Show the calculated avalanches only
         if isTwoImages:
             ax2 = axs[0,1]
-            #plt.subplot(1,2,2)
         else:
             ax2 = axs[1,2] 
-            #plt.subplot(2,3,6)
         im, n_clusters = self.label(switchTimes_images)
-        self.outIm = im
         myPalette_background = [(0.75,0.75,0.75)]
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
                                           for j in np.random.permutation(range(n_clusters))]
         if preAvalanches:
-            w = self._getSwitchTimesOverThreshold(False, fillValue=self.fillValue).reshape(self.dimX, self.dimY) 
-            white = (w < self.nImage) & (w > 0)
+            #w = self._getSwitchTimesOverThreshold(False, fillValue=self.fillValue).reshape(self.dimX, self.dimY) 
+            white = np.logical_and((data < self.nImage),(data > 0))
             imOut = im + white * (max(im.flatten()) + 1)
             myPalette = myPalette + [(1,1,1)] # Add white to the palette
         ax2.imshow(imOut, mpl.colors.ListedColormap(myPalette))      
@@ -1137,12 +1171,10 @@ class StackImages:
         plt.show()
         print("Press: Next, Previous, sAve")
         size = np.sum(switchTimes_images)
-        msg = "Avalanche %i: %i pixels (%.2f %% of the image)" % \
-              (self.nImage, size, float(size)/(self.dimX*self.dimY)*100)
+        msg = "%s %i: %i pixels (%.2f %% of the image)" % \
+              (data_type.capitalize(), self.nImage, size, float(size)/(self.dimX*self.dimY)*100)
         print(msg)
-        self.im0 = im
         sub_cluster_sizes = sorted([np.sum(im==i) for i in range(1, n_clusters+1)], reverse=True)
-        print(sub_cluster_sizes)
         print("Cluster sizes: " + ", ".join([str(size) for size in sub_cluster_sizes if size>1]))
         if not self.isConnectionRawImage:
             self.figRawAndCalc.canvas.mpl_connect('key_press_event', self._show_next_raw_image)

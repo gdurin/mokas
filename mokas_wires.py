@@ -117,19 +117,21 @@ class Wires(StackImages):
             im = self._switchTimes2D == sw
             largest_cluster, cluster_size = self._largest_cluster(im)
             if cluster_size >= min_size:
-                l_initial, l_final, im_corners = self._get_upper_and_lower_contour(largest_cluster, 
-                    motion=self.motion, is_largest_size_only=False)
-                if len(l_initial) == 0 or len(l_final) == 0: # in case of errors
-                    print("Error for switch: %i, iteration %i" % (sw, i))
-                    next
-                length, curvature = self._get_lenght_and_curvature(l_initial, curvature=True)
-                if length is not None:
-                    lenghts_initial.append(length)
-                    length, curvature = self._get_lenght_and_curvature(l_final, curvature=True)
-                    lenghts_final.append(length)
-                    curvatures_final.append(curvature)
-                    sws.append(sw)
-                    sizes.append(cluster_size)
+                out = self._get_upper_and_lower_contour(largest_cluster, 
+                    is_largest_size_only=False)
+                l_initial, l_final, L_linear, success = out
+                if success:
+                    if len(l_initial) == 0 or len(l_final) == 0: # in case of errors
+                        print("Error for switch: %i, iteration %i" % (sw, i))
+                        next
+                    length, curvature = self._get_lenght_and_curvature(l_initial, curvature=True)
+                    if length is not None:
+                        lenghts_initial.append(length)
+                        length, curvature = self._get_lenght_and_curvature(l_final, curvature=True)
+                        lenghts_final.append(length)
+                        curvatures_final.append(curvature)
+                        sws.append(sw)
+                        sizes.append(cluster_size)
                 #image_corners = image_corners + i * im_corners.astype('bool')
         self.stats_prop['sizes'] = np.array(sizes)
         self.stats_prop['lenghts_initial'] = np.array(lenghts_initial)
@@ -169,7 +171,7 @@ class Wires(StackImages):
 
     def _get_upper_and_lower_contour(self, cluster, n_fast=12, threshold_fast=0.1, 
         is_largest_size_only=True, test=False):
-        return cmed.get_upper_and_lower_contour(cluster, self.motion, self.ref_point, 
+        return cmet.get_upper_and_lower_contour(cluster, self.motion, self.ref_point, 
             n_fast, threshold_fast, is_largest_size_only, test)
         
     def _largest_cluster(self, im, NNstructure=None):
