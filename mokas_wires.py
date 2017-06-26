@@ -277,8 +277,7 @@ class Wires(StackImages):
             x1s[-1] = len(signal)
         return x0s, x1s
 
-    def plotEventsAndClusters(self, cluster_threshold=5, method='sub_cluster', 
-                                fig=None, axs=None, title=None, with_cluster_number=True):
+    def getEventsAndClusters(self, cluster_threshold=5, method='sub_cluster'):
         """
         method: str
             sub_cluster: detect if there is a sub_cluster larger than the threshold
@@ -288,9 +287,77 @@ class Wires(StackImages):
             self.plotHistogram(self._switchTimes2D)
         x0s, x1s = self._zeros(cluster_threshold, method=method)
         self.events_and_clusters = mke.EventsAndClusters(self._switchTimes2D, NNstructure=self.NNstructure)
-        self.events_and_clusters.get_events_and_clusters(cluster_limits=zip(x0s,x1s))
-        self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, 
-                                            fig=fig, axs=axs, title=title, with_cluster_number=False)
+        out = self.events_and_clusters.get_cluster2D('edges', cluster_limits=zip(x0s,x1s))
+        self.cluster2D_start, self.cluster2D_end = out
+        #self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, 
+        #                                    fig=fig, axs=axs, title=title, with_cluster_number=False)
+
+    
+    def plot_cluster_maps(self, cmap='pastel', zoom_in_data=True, 
+                    fig=None, axs=None, title=None,
+                    with_cluster_number=False):
+
+        try:
+            q = self.cluster2D_start
+        except:
+            print("run getEvents and clusters")
+
+        if cmap == 'pastel' or cmap == 'random':
+            n_colors = self.switches[-1] - self.switches[0] + 1
+            clrs = np.random.rand(n_colors, 3) 
+            if cmap == 'pastel':
+                clrs = (clrs + [1,1,1])/2
+            clrs[0] = [0,0,0]
+            self.cmap = mpl.colors.ListedColormap(clrs)
+        else:
+            self.cmap = cmap
+
+        if zoom_in_data:
+            rows_mean_sw = np.mean(self._switchTimes2D, axis=1)
+            jj = np.where(rows_mean_sw != self.fillValue)
+            i0, i1 = np.min(jj) - 20, np.max(jj) + 20
+            rows, cols = self._switchTimes2D.shape
+            if i0 < 0:
+                i0 = 0
+            if i1 > rows:
+                i1 = rows
+            switch2D = self._switchTimes2D[i0:i1+1,:]
+            cluster2D_start = self.cluster2D_start[i0:i1+1,:]
+            cluster2D_end = self.cluster2D_end[i0:i1+1,:]
+        else:
+            switch2D = self._switchTimes2D
+            cluster2D_start = self.cluster2D_start
+            cluster2D_end = self.cluster2D_end
+        cluster_switches = np.unique(self.cluster2D_start)[1:]
+        
+        # Plot
+        if not fig:
+            fig, axs = plt.subplots(1, 3, sharex=True, sharey=True) # ColorImages of events and sizes
+            ax0, ax1, ax2 = axs[0], axs[1], axs[2]
+        else:
+            ax0, ax1, ax2 = axs
+        ax0.imshow(switch2D, cmap=self.cmap)
+        ax1.imshow(cluster2D_start, cmap=self.cmap)
+        ax2.imshow(cluster2D_end, cmap=self.cmap)
+        rows, cols = switch2D.shape
+        ax0.axis((0,cols,rows,0))
+        font = {'weight': 'normal', 'size': 8}
+        for i in cluster_switches:
+            cluster = cluster2D_start == i
+            cnts = measure.find_contours(cluster, 0.5)
+            for cnt in cnts:
+                X,Y = cnt[:,1], cnt[:,0]
+                for ax in [ax0, ax1, ax2]:
+                    ax.plot(X, Y, c='k', antialiased=True, lw=1)
+            if with_cluster_number:
+                # Calculate the distance map and find the indexes of the max
+                d = mahotas.distance(cluster)
+                yc, xc = np.unravel_index(d.argmax(), d.shape)
+                # print("cluster %i: (%i, %i)" % (i, xc, yc))
+                ax1.text(xc, yc, str(i), horizontalalignment='center',
+                    verticalalignment='center', fontdict=font)
+        if title:
+            fig.suptitle(title, fontsize=30)
 
 
     def post_processing(self, compare_to_row_images=False, fillValue=-1):

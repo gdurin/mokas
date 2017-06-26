@@ -886,9 +886,10 @@ class StackImages:
         if key != 'n' and key != 'p' and key!= "a":
             return
         if self.data_type == 'event':
-            sw = self._switchTimesUnique
-            step = 1*(key=='n') -1*(key=='p')
-
+            sw = self._switchTimesUnique   
+        elif self.data_type == 'cluster':
+            sw = self.sw_clusters_start
+        step = 1*(key=='n') -1*(key=='p')
 
         if key == "a":
             outDir = os.path.join(self._mainDir, "Results")
@@ -984,14 +985,14 @@ class StackImages:
             print("self.cluster2D does non exists yet. Run the appropriate code")
             return
         self.sw_clusters_start = np.unique(self.cluster2D_start)[1:]
-        self.sw_clusters.end = np.unique(self.cluster2D_end)[1:]
+        self.sw_clusters_end = np.unique(self.cluster2D_end)[1:]
         if nImage is None:
             self.nImage = self.sw_clusters_start[0]
             print("Starting from image %i" % self.nImage)
-        elif nImage not in sw_clusters_start:
+        elif nImage not in self.sw_clusters_start:
             print("No switch there")
-            i = np.argmin(abs(nImage - sw_clusters_start))
-            print("Closest values: %s " % " ".join([str(p) for p in sw_clusters_start[i-1:i+2]]))
+            i = np.argmin(abs(nImage - self.sw_clusters_start))
+            print("Closest values: %s " % " ".join([str(p) for p in self.sw_clusters_start[i-1:i+2]]))
             return
         else:
             self.nImage = nImage
@@ -1035,6 +1036,7 @@ class StackImages:
         isTwoImages: bool
         if True shows only two images, the raw+1 and the calculated one
         """
+        gray, black, white = (0.75,0.75,0.75), (0,0,0), (1,1,1)
         self.data_type = data_type
         if data_type == 'event':
             data = self._switchTimes2D
@@ -1042,7 +1044,9 @@ class StackImages:
         elif data_type == 'cluster':
             data = self.cluster2D_start
             i, = np.where(self.sw_clusters_start==self.nImage)
-            step_image = self.cluster2D_end[i[0]] - (self.nImage - 1)
+            im = data == self.nImage
+            step_image = np.max(self._switchTimes2D[im].flatten()) - (self.nImage - 1)
+            #step_image = self.sw_clusters_end[i[0]] - (self.nImage - 1)
 
         # Subtract first image
         if subtract_first_image:
@@ -1075,8 +1079,10 @@ class StackImages:
         contours = measure.find_contours(switchTimes_images, 0.5)
         cl = self._pColors[self.nImage - self.min_switch]
         #myMap = mpl.colors.ListedColormap([(0,0,0),cl],'mymap',2)
-        mapGreyandBlack = mpl.colors.ListedColormap([(0.75,0.75,0.75),(0,0,0)],'mymap',2) # in grey and black      
-        #plt.clf()
+        #mapGreyandBlack = mpl.colors.ListedColormap([(0.75,0.75,0.75),(0,0,0)],'mymap',2) # in grey and black      
+        
+        mapGreyandBlack = mpl.colors.ListedColormap([white, gray],'mymap',2) # in grey and black      
+
         # Plot the two raw images first
         if isTwoImages:
             #ax1 = plt.subplot(1,2,1)
@@ -1114,10 +1120,16 @@ class StackImages:
             ax.imshow(im, plt.cm.gray)
             # Use find_contours
             for n, contour in enumerate(contours):
-                ax.plot(contour[:, 1], contour[:, 0], linewidth=1, color='r')
+                ax.plot(contour[:, 1], contour[:, 0], linewidth=2, color='k')
+            if data_type == 'cluster':
+                for sw in range(self.nImage, self.nImage+step_image+1):
+                    im = np.logical_and((self._switchTimes2D == sw), (data == self.nImage))
+                    sub_cnts = measure.find_contours(im, 0.5)
+                    for sub_cnt in sub_cnts:
+                        ax.plot(sub_cnt[:, 1], sub_cnt[:, 0], linewidth=1)
             ax.axis((0, self.dimY, self.dimX, 0))        
             ax.grid(color='blue',ls="-")
-            ax.set_title("Raw Image %s + Calculated Aval." % (self.nImage-1))        
+            ax.set_title("Image %s + Calculated %s" % (self.nImage-1, data_type))        
             # Show the raw image difference
             ax = axs[1,0]
             n0 = self.nImage - 1 + step_image
@@ -1134,14 +1146,15 @@ class StackImages:
             #plt.subplot(2,3,5)
             ax1.imshow(self._imDiff((n0,self.nImage-1)), plt.cm.gray)
             # Use find_contours
-            for n, contour in enumerate(contours):
-                ax1.plot(contour[:, 1], contour[:, 0], linewidth=1, color='r')
+            for contour in contours:
+                ax1.plot(contour[:, 1], contour[:, 0], linewidth=2, color='k')
+
             if autoscale:
                 ax1.axis((0, self.dimY, self.dimX, 0))
             elif self.ax0_axis is not None:
                 ax1.axis(self.ax0_axis)
         
-            ax1.set_title("Raw Diff and Calculated Aval.")
+            ax1.set_title("Raw Diff and Calculated %s" % data_type)
             ax1.grid(color='blue',ls="-")
         
         # Show the calculated avalanches only
@@ -1149,20 +1162,28 @@ class StackImages:
             ax2 = axs[0,1]
         else:
             ax2 = axs[1,2] 
-        im, n_clusters = self.label(switchTimes_images)
-        myPalette_background = [(0.75,0.75,0.75)]
+        # if data_type == 'event':
+        #     imOut, n_clusters = self.label(switchTimes_images)
+        # elif data_type == 'cluster':
+        #     im = np.logical_and((data >= self.nImage), (data <= self.nImage + step_image))
+        #     imOut, n_clusters = self.label(im)
+        #     print(n_clusters)
+        imOut, n_clusters = self.label(switchTimes_images)
+        # Prepare the palette
+        myPalette_background = [(0.9,0.9,0.9)]
         myPalette = myPalette_background + [hsv_to_rgb(j/float(n_clusters),1,1)
                                           for j in np.random.permutation(range(n_clusters))]
         if preAvalanches:
             #w = self._getSwitchTimesOverThreshold(False, fillValue=self.fillValue).reshape(self.dimX, self.dimY) 
-            white = np.logical_and((data < self.nImage),(data > 0))
-            imOut = im + white * (max(im.flatten()) + 1)
-            myPalette = myPalette + [(1,1,1)] # Add white to the palette
-        ax2.imshow(imOut, mpl.colors.ListedColormap(myPalette))      
+            _pre = np.logical_and((data < self.nImage), (data > 0))
+            imOut = imOut + _pre * (max(imOut.flatten()) + 1)
+            myPalette = myPalette + [gray] # Add gray to the palette
+            
+        ax2.imshow(imOut, mpl.colors.ListedColormap(myPalette))
         #plt.imshow(switchTimes_images, mapGreyandBlack)
         if not isTwoImages:
             ax2.grid(color='blue',ls="-")
-            ax2.set_title("Calculated Aval.")
+            ax2.set_title("Calculated %s" % data_type)
         else:
             ax2.xaxis.set_visible(False)
             ax2.yaxis.set_visible(False)

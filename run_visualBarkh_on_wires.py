@@ -58,7 +58,7 @@ class RunWires:
         self.figs.append(self.fig1)
         self.fig2, self.axs2 = plt.subplots(self.n_experiments, 1, sharey=True, squeeze=False) # Histograms
         self.figs.append(self.fig2)
-        self.fig3, self.axs3 = plt.subplots(cols1, 2*rows1, sharex=True, sharey=True, squeeze=False) # events and clusters
+        self.fig3, self.axs3 = plt.subplots(cols1, 3*rows1, sharex=True, sharey=True, squeeze=False) # events and clusters
         self.figs.append(self.fig3)
         #for n in range(self.n_experiments):
         allParameters = self.wireParameters.copy()
@@ -90,9 +90,12 @@ class RunWires:
             #                          invert_y_axis=False, plot_rays=False,
             #                          fig=self.fig3, ax=self.axs3[n], title=title)
             #imArray.get_stats_prop()
-            imArray.plotEventsAndClusters(cluster_threshold=30, fig=self.fig3, axs=(self.axs3[n,0], self.axs3[n,1]), 
-                                            title=title, with_cluster_number=True)
-            imArray.cluster2D = imArray.events_and_clusters.cluster2D
+            imArray.getEventsAndClusters(cluster_threshold=30)
+            # TO BE FIXED
+            axs = self.axs3[n,0], self.axs3[n,1], self.axs3[n,2]
+            imArray.plot_cluster_maps(imArray._colorMap, zoom_in_data=True, 
+                                        fig=self.fig3, axs=axs, 
+                                        title=title, with_cluster_number=False)
                     
         suptitle = " - ".join(self.rootDir.split("/")[-2:])
         for fig in self.figs:
@@ -102,8 +105,8 @@ class RunWires:
     def save_hdf5(self):
         for experiment in self.imArray_collector:
             wire = self.imArray_collector[experiment]
-            data = [wire.cluster2D, wire._switchTimes2D, wire._switchSteps2D]
-            labels = ['cluster2D', 'switchTimes2D', 'switchSteps2D']
+            data = [wire.cluster2D_start, wire.cluster2D_end, wire._switchTimes2D, wire._switchSteps2D]
+            labels = ['cluster2D_start', 'cluster2D_end', 'switchTimes2D', 'switchSteps2D']
             wire.hdf5.save_data(data, labels, dtype=np.int16)
             # Save histogram
             hist = [wire.N_hist, wire.bins_hist]
@@ -189,8 +192,8 @@ if __name__ == "__main__":
         n_wire = 1
         wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
-        wires.save_hdf5()
-        wires.save_figs()
+        #wires.save_hdf5()
+        #wires.save_figs()
 
     elif choice == 'IEF_old_200um':
         set_current = "0.14"

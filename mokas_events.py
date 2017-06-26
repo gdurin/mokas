@@ -174,6 +174,7 @@ class EventsAndClusters():
             'limits' considers the clusters within two values passes by cluster_limits
             'edges' considers all the clusters having adjacent pixels
         """
+        self.is_events_and_clusters = True
         if method == 'limits':
             return self._get_cluster2D_limits(min_cluster_size, cluster_limits)
         elif method == 'edges':
@@ -193,7 +194,9 @@ class EventsAndClusters():
         print("Using the limits")
         #cluster2D_end gives the end time of the cluster
         #cluster2D_start gives the start time of the cluster
+        cluster2D_start = np.copy(self.switch2D)
         cluster2D_end = np.copy(self.switch2D)
+        cluster_switches = np.unique(cluster2D_end)[1:]
         
         # pass I
         for sw_in, sw_fin in cluster_limits:
@@ -215,15 +218,12 @@ class EventsAndClusters():
                     if sw_next in switches_at_edge:
                         cluster2D_end[cluster] = sw_next
 
-            cluster_switches = np.unique(cluster2D_end)[1:]
-            cluster2D_start = np.copy(self.switch2D)
-
-            for switch in cluster_switches:
-                q = cluster2D_end == switch
-                clusters, n_cluster = mahotas.label(q, self.NNstructure)
-                for i in range(1, n_cluster+1):
-                    cluster = clusters == i
-                    cluster2D_start[cluster] = np.min(self.switch2D[cluster]) 
+        for switch in cluster_switches:
+            q = cluster2D_end == switch
+            clusters, n_cluster = mahotas.label(q, self.NNstructure)
+            for i in range(1, n_cluster+1):
+                cluster = clusters == i
+                cluster2D_start[cluster] = np.min(self.switch2D[cluster]) 
 
         # pass II
         n_cluster_limits = len(cluster_limits)
@@ -253,12 +253,13 @@ class EventsAndClusters():
         """
         get the statistics of the clusters
         """
-        print(min_cluster_size)
+        if min_cluster_size is None:
+            min_cluster_size = 0
         #cluster2D_end gives the end time of the cluster
         #cluster2D_start gives the start time of the cluster
         cluster2D_end = np.copy(self.switch2D)
-        
-        for sw0 in self.switches:
+        switches = np.unique(cluster2D_end)[1:]
+        for sw0 in switches:
             q = cluster2D_end == sw0
             sw_next = sw0 + 1
             clusters, n_cluster = mahotas.label(q, self.NNstructure)
@@ -314,66 +315,7 @@ class EventsAndClusters():
     #     return average_cluster_sizes, average_cluster_durations
 
 
-    # def plot_maps(self, cmap='pastel', zoom_in_data=True, 
-    #                 fig=None, axs=None, title=None,
-    #                 with_cluster_number=False):
-
-    #     if not self.is_events_and_clusters:
-    #         self.get_events_and_clusters()
-
-    #     if cmap == 'pastel' or cmap == 'random':
-    #         n_colors = self.switches[-1] - self.switches[0] + 1
-    #         clrs = np.random.rand(n_colors, 3) 
-    #         if cmap == 'pastel':
-    #             clrs = (clrs + [1,1,1])/2
-    #         clrs[0] = [0,0,0]
-    #         self.cmap = mpl.colors.ListedColormap(clrs)
-    #     else:
-    #         self.cmap = cmap
-
-    #     if zoom_in_data:
-    #         rows_mean_sw = np.mean(self.switch2D, axis=1)
-    #         jj = np.where(rows_mean_sw != self.fillValue)
-    #         i0, i1 = np.min(jj) - 20, np.max(jj) + 20
-    #         rows, cols = self.switch2D.shape
-    #         if i0 < 0:
-    #             i0 = 0
-    #         if i1 > rows:
-    #             i1 = rows
-    #         switch2D = self.switch2D[i0:i1+1,:]
-    #         cluster2D = self.cluster2D[i0:i1+1,:]
-    #     else:
-    #         switch2D = self.switch2D
-    #         cluster2D = self.cluster2D
-    #     cluster_switches = np.unique(self.cluster2D)[1:]
-        
-    #     # Plot
-    #     if not fig:
-    #         fig, axs = plt.subplots(1, 2, sharex=True, sharey=True) # ColorImages of events and sizes
-    #         ax0, ax1 = axs[0], axs[1]
-    #     else:
-    #         ax0, ax1 = axs
-    #     ax0.imshow(switch2D, cmap=self.cmap)
-    #     ax1.imshow(cluster2D, cmap=self.cmap)
-    #     rows, cols = cluster2D.shape
-    #     ax0.axis((0,cols,rows,0))
-    #     font = {'weight': 'normal', 'size': 8}
-    #     for i in cluster_switches:
-    #         cluster = cluster2D == i
-    #         cnts = measure.find_contours(cluster, 0.5)
-    #         for cnt in cnts:
-    #             X,Y = cnt[:,1], cnt[:,0]
-    #             for ax in [ax0, ax1]:
-    #                 ax.plot(X, Y, c='k', antialiased=True, lw=1)
-    #         if with_cluster_number:
-    #             # Calculate the distance map and find the indexes of the max
-    #             d = mahotas.distance(cluster)
-    #             yc, xc = np.unravel_index(d.argmax(), d.shape)
-    #             # print("cluster %i: (%i, %i)" % (i, xc, yc))
-    #             ax1.text(xc, yc, str(i), horizontalalignment='center',
-    #                 verticalalignment='center', fontdict=font)
-    #     if title:
-    #         fig.suptitle(title, fontsize=30)
+    
 
 
 #############################################################################
