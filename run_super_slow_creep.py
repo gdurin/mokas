@@ -24,13 +24,13 @@ if __name__ == "__main__":
         print(imParameters['pattern'])
         imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
         #imParameters['imCrop'] = None
-        imParameters['firstIm'] = 0 # Use python convention: start from zer$
+        imParameters['firstIm'] = 0 # Use python convention: start from zero$
         imParameters['lastIm'] = -1
         imParameters['filtering'] = 'gauss'
         imParameters['sigma'] = 2
         imParameters['subtract'] = None # Subtract a reference image
-        threshold = None
-        palette = 'coolwarm'
+        threshold = 12
+        palette = 'random'
         erase_small_events_percent = None
         imParameters['resize_factor'] = None
         # Kernel setups: do not touch

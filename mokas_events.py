@@ -63,45 +63,45 @@ def pixels_at_edges(cluster, with_diagonal=True):
 
 
 
-class PlotEventsAndCluster:
-    """
-    class for plotting
-    """
-    def plot_size_distributions(self, events_sizes, cluster_sizes):
-        fig, axs = plt.subplots(1, 1) # Distributions of events and clusters
-        fig.suptitle(self.title, fontsize=30)
-        # Calculate and plot the distributions of clusters and clusters
-        for sizes, label in zip([events_sizes, cluster_sizes], ['events', 'clusters']):
-            x, y, yerr = gLD.logDistribution(sizes, log_step=0.1, 
-                                   first_point=1., normed=True)
-            # Plots of the distributions
-            axs.loglog(x, y,'o', label=label)
-            axs.errorbar(x, y, yerr, fmt=None)
-            if label == 'events':
-                axs.loglog(x, 0.25 * x**-1.17 * np.exp(-x/100),'-', label=r'S^{-1.17} exp(-S/50)')
-            elif label == 'clusters':
-                axs.loglog(x, 0.25 * x**-1.17,'-', label=r'S^{-1.17} exp(-S/50)')
-        axs.legend()
-        axs.grid(True)
+# class PlotEventsAndCluster:
+#     """
+#     class for plotting
+#     """
+#     def plot_size_distributions(self, events_sizes, cluster_sizes):
+#         fig, axs = plt.subplots(1, 1) # Distributions of events and clusters
+#         fig.suptitle(self.title, fontsize=30)
+#         # Calculate and plot the distributions of clusters and clusters
+#         for sizes, label in zip([events_sizes, cluster_sizes], ['events', 'clusters']):
+#             x, y, yerr = gLD.logDistribution(sizes, log_step=0.1, 
+#                                    first_point=1., normed=True)
+#             # Plots of the distributions
+#             axs.loglog(x, y,'o', label=label)
+#             axs.errorbar(x, y, yerr, fmt=None)
+#             if label == 'events':
+#                 axs.loglog(x, 0.25 * x**-1.17 * np.exp(-x/100),'-', label=r'S^{-1.17} exp(-S/50)')
+#             elif label == 'clusters':
+#                 axs.loglog(x, 0.25 * x**-1.17,'-', label=r'S^{-1.17} exp(-S/50)')
+#         axs.legend()
+#         axs.grid(True)
 
-    def average_size_vs_duration_of_clusters(self, durations, sizes):
-        fig, ax = plt.subplots(1, 1)
-        if durations[0] == 0:
-            durations = durations[1:]
-            sizes = sizes[1:]
+#     def average_size_vs_duration_of_clusters(self, durations, sizes):
+#         fig, ax = plt.subplots(1, 1)
+#         if durations[0] == 0:
+#             durations = durations[1:]
+#             sizes = sizes[1:]
 
-        ax.loglog(durations, sizes,'o')
-        ax.set_xlabel("Duration (frames)")
-        ax.set_ylabel("Sizes (pixels area)")
-        ax.grid(True)
-        log_sizes = np.log10(sizes)
-        log_durations = np.log10(durations)
-        res = np.polyfit(log_durations, log_sizes, 1)
-        gamma = res[0]
-        c0 = 10**res[1]
-        ax.loglog(durations, c0*durations**gamma, label=str(gamma))
-        plt.legend()
-        plt.show()
+#         ax.loglog(durations, sizes,'o')
+#         ax.set_xlabel("Duration (frames)")
+#         ax.set_ylabel("Sizes (pixels area)")
+#         ax.grid(True)
+#         log_sizes = np.log10(sizes)
+#         log_durations = np.log10(durations)
+#         res = np.polyfit(log_durations, log_sizes, 1)
+#         gamma = res[0]
+#         c0 = 10**res[1]
+#         ax.loglog(durations, c0*durations**gamma, label=str(gamma))
+#         plt.legend()
+#         plt.show()
     
 
 class EventsAndClusters():
