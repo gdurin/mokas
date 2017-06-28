@@ -1080,8 +1080,19 @@ class StackImages:
         cl = self._pColors[self.nImage - self.min_switch]
         #myMap = mpl.colors.ListedColormap([(0,0,0),cl],'mymap',2)
         #mapGreyandBlack = mpl.colors.ListedColormap([(0.75,0.75,0.75),(0,0,0)],'mymap',2) # in grey and black      
-        
         mapGreyandBlack = mpl.colors.ListedColormap([white, gray],'mymap',2) # in grey and black      
+
+
+
+
+        im, n_clusters = self.label(switchTimes_images)
+        sizes = mahotas.labeled.labeled_size(im)[1:]
+                
+        self.figRawAndCalc.suptitle('Number of clusters = %i ; Biggest cluster size = %i pixels' % (n_clusters, np.max(sizes)), fontsize=18)
+            
+
+
+
 
         # Plot the two raw images first
         if isTwoImages:
