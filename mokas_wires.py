@@ -277,20 +277,28 @@ class Wires(StackImages):
             x1s[-1] = len(signal)
         return x0s, x1s
 
-    def getEventsAndClusters(self, cluster_threshold=5, method='sub_cluster'):
+    def getEventsAndClusters(self, get_clusters_method='limits',
+                        cluster_threshold=5, 
+                        method_for_limits='sub_cluster',
+                        ):
         """
+        get_clusters_methods : string
+            Two methods can be used to calculate the clusters:
+            'limits': using the min and max of the switches using the cluster_threshold
+            'edges': using touching events 
         method: str
             sub_cluster: detect if there is a sub_cluster larger than the threshold
             full_histogram: detect if there total number of switches is larger than the threshold
         """
-        if not self.is_histogram:   
-            self.plotHistogram(self._switchTimes2D)
-        x0s, x1s = self._zeros(cluster_threshold, method=method)
         self.events_and_clusters = mke.EventsAndClusters(self._switchTimes2D, NNstructure=self.NNstructure)
-        out = self.events_and_clusters.get_cluster2D('edges', cluster_limits=zip(x0s,x1s))
+        if get_clusters_method == 'limits':
+            if not self.is_histogram:   
+                self.plotHistogram(self._switchTimes2D)
+            x0s, x1s = self._zeros(cluster_threshold, method=method_for_limits)
+            out = self.events_and_clusters.get_cluster2D('limits', cluster_limits=zip(x0s,x1s))
+        elif get_clusters_method == 'egdes':
+            out = self.events_and_clusters.get_cluster2D('edges')
         self.cluster2D_start, self.cluster2D_end = out
-        #self.events_and_clusters.plot_maps(self._colorMap, zoom_in_data=self.zoom_in_data, 
-        #                                    fig=fig, axs=axs, title=title, with_cluster_number=False)
 
     
     def plot_cluster_maps(self, cmap='pastel', zoom_in_data=True, 

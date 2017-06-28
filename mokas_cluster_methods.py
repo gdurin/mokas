@@ -138,6 +138,7 @@ def _non_maximal_suppression(im_corners, cluster, NN=3):
         V.append(np.sum(np.abs(1-cl*kernel)))
     V = np.array(V)
     i = V.argmax()
+    print("Average V: %f, %f" % (np.mean(V), np.median(V)))
     return corners_rows[i], corners_cols[i]
 
 def get_corner_index(im_corners, cnt_cluster):
@@ -170,6 +171,7 @@ def get_contours(cluster, cluster_type, threshold=0.5, connection='low'):
             return cnts_cluster[0], cluster
     else:
         return cnts_cluster, cluster
+
 
 def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='downward',
                                 n_fast=12, threshold_fast=0.1, test=False):
@@ -209,6 +211,7 @@ def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='d
     test : bool
         Plot the contours to test
     """
+
     failure = [np.NaN, np.NaN, np.NaN, False]
     im, n_clusters = mahotas.label(cluster, np.ones((3,3)))
     if n_clusters != 1:
@@ -232,43 +235,52 @@ def get_upper_and_lower_contour(cluster, cluster_type, ref_point=None, motion='d
         cluster = measure.grid_points_in_poly(cluster.shape, cnt_cluster)
         # Find the corners
         cf = feature.corner_fast(cluster, n_fast, threshold_fast)
+        if np.sum(cf) == 0:
+            cf = feature.corner_fast(cluster, n_fast-1, threshold_fast)
         im_cf, n_clusters_cf = mahotas.label(cf, np.ones((3,3)))
-        if n_clusters_cf > 2:
-            print("Too many corners")
-            return failure
-        elif not n_clusters_cf:
+        if not n_clusters_cf:
+            failure[-1] = "No corners found"
             print("No corners found")
             print(n_clusters_cf, cluster_type, np.sum(im_cf))
             return failure
         ##########################################################
         if cluster_type == '0000':
             i_corners = []
-            if n_clusters_cf != 2:
-                print("Only %i corner(s)" % n_clusters_cf)
-                return [np.NaN, np.NaN, np.NaN, False]
-            for i in range(2):
-                corner_index = get_corner_index(im_cf==i+1, cnt_cluster)
+            if n_clusters_cf == 1:
+                #print("Only 1 corner")
+                failure[-1] = 'Only 1 corner'
+                return failure
+            elif n_clusters_cf == 2:
+                i_range = range(1,3)
+            elif n_clusters_cf > 2:
+                # Take the two im_cf at the rightmost and leftmost positions
+                h_pos = [np.nonzero(im_cf==i)[1] for i in range(1,n_clusters_cf+1)]
+                leftmost = np.array([np.min(h) for h in h_pos]).argmin() + 1
+                rightmost = np.array([np.max(h) for h in h_pos]).argmax() + 1
+                i_range = [leftmost, rightmost]
+            for i in i_range:
+                corner_index = get_corner_index(im_cf==i, cnt_cluster)
                 if corner_index is None:
+                    failure[-1] = "No corner's index"
                     return failure
-                i_corners.append(corner_index)
+                i_corners.append(corner_index)                    
             # 5. Split the cluster contour in two sub-arrays
             i0, i1 = np.sort(i_corners)
             cnt_cluster_rolled = np.roll(cnt_cluster, len(cnt_cluster)-i0, axis=0)
             l0, l1 = cnt_cluster_rolled[:i1-i0+1], cnt_cluster_rolled[i1-i0:]
-        elif cluster_type == '1000' or cluster_type == '0100':
-            if n_clusters_cf > 1:
-                sizes = mahotas.labeled.labeled_size(im_cf)[1:]
-                i = np.argmax(sizes) + 1
-                im_cf = im_cf == i
+        elif '1' in cluster_type[:2]:
+            if n_clusters_cf > 1 and cluster_type == '1000':
+                h_pos = [np.nonzero(im_cf==i)[1] for i in range(1,n_clusters_cf+1)]                
+                rightmost = np.array([np.max(h) for h in h_pos]).argmax() + 1
+                im_cf = im_cf == rightmost
+            elif n_clusters_cf > 1 and cluster_type == '0100':
+                h_pos = [np.nonzero(im_cf==i)[1] for i in range(1,n_clusters_cf+1)]
+                leftmost = np.array([np.min(h) for h in h_pos]).argmin() + 1
+                im_cf = im_cf == leftmost
             i0 = get_corner_index(im_cf, cnt_cluster)
             if i0 is None:
-                # try to get rid of small objects
-                cluster = morph.remove_small_objects(cluster)
-                cnt_cluster, cluster = get_contours(cluster, cluster_type, connection='low')
-                # Find the corners
-                cf = feature.corner_fast(cluster, n_fast, threshold_fast)
-                im_cf, n_clusters_cf = mahotas.label(cf, np.ones((3,3)))
-                i0 = get_corner_index(im_cf, cnt_cluster)
+                failure[-1] = "No corner found"
+                return failure
             l0, l1 = cnt_cluster[:i0+1], cnt_cluster[i0:]
     
     ####################################

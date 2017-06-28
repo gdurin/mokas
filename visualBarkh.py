@@ -1147,7 +1147,7 @@ class StackImages:
             ax1.imshow(self._imDiff((n0,self.nImage-1)), plt.cm.gray)
             # Use find_contours
             for contour in contours:
-                ax1.plot(contour[:, 1], contour[:, 0], linewidth=2, color='k')
+                ax1.plot(contour[:, 1], contour[:, 0], linewidth=2, color='r')
 
             if autoscale:
                 ax1.axis((0, self.dimY, self.dimX, 0))

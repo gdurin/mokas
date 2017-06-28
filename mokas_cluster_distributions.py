@@ -32,19 +32,17 @@ class Clusters:
         self.cluster2D = OrderedDict()
         with h5py.File(self._fname, 'a') as f:
             for n_exp in n_experiments:
-                cluster_dataset = self._baseGroup + "/%i/cluster2D" % n_exp
+                cluster_dataset = self._baseGroup + "/%i/cluster2D_start" % n_exp
                 grp0 = f[cluster_dataset]
                 self.cluster2D[n_exp] = grp0[...]
         rows, cols = self.cluster2D[n_exp].shape
         # All the figure have to be roated to get the motion downward
         self.ref_point = (0, cols//2)
         self.motion = motion
-        self.Axy_types = ['0000', '0100', '1000','1100']
-        self.colors = {'0000': 'r', '1000': 'b', '0100': 'c', '1100': 'g'}
+        self._Axy_types = ['0000', '0100', '1000','1100']
         self.cluster_data = OrderedDict()
         if motion == 'downward':
             self.direction = 'Bottom_to_top'
-
 
     def get_experiment_stats(self):
         print("Get the statistics for each experiment")
@@ -90,7 +88,7 @@ class Clusters:
                 l_front = cmet.get_length(cnts)
 
                 # Here there is a problem
-                # Cluster0 can be made of 2 or more subclaster (this is not uncommon)
+                # Cluster0 can be made of 2 or more subclasters (this is not uncommon)
                 # So we need to loop over the sub_clusters
                 sub_clusters, n_sub_clusters = mahotas.label(cluster0, np.ones((3,3)))
                 # Save the data
@@ -128,7 +126,7 @@ class Clusters:
                     # L is the linear distance between the 
                     l0, l1, L_linear, success = cmet.get_upper_and_lower_contour(sub_cluster, sub_cluster_type,
                                                 self.ref_point, motion=self.motion)
-                    if success:
+                    if success is True:
                         l0, l1 = cmet.get_length(l0), cmet.get_length(l1)
                     sub_cluster_data['switch'].append(switch)
                     sub_cluster_data['type'].append(sub_cluster_type)
@@ -136,6 +134,7 @@ class Clusters:
                     sub_cluster_data['l0'].append(l0)
                     sub_cluster_data['l1'].append(l1)
                     sub_cluster_data['L_linear'].append(L_linear)
+                    sub_cluster_data['success'].append(success)
 
             cluster_cols = ['n_exp', 'switch', 'type', 'area', 'n_sub_cl',
                             'a_10', 'a_01', 'r_curv', 'x_v', 'y_v',
@@ -143,7 +142,7 @@ class Clusters:
                             'l_front']
             df = pd.DataFrame.from_dict(cluster_data)
             self.cluster_data[n_exp] = df[cluster_cols]
-            sub_cluster_cols = ['switch', 'type', 'area', 'l0', 'l1', 'L_linear']
+            sub_cluster_cols = ['switch', 'type', 'area', 'l0', 'l1', 'L_linear', 'success']
             df = pd.DataFrame.from_dict(sub_cluster_data)
             self.sub_cluster_data[n_exp] = df[sub_cluster_cols]
             del df
@@ -161,8 +160,8 @@ class Clusters:
         ax.set_title(r'${R.\ of\ Curvature:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
         # Plot the pie
         ax = axs[0,1]
-        labels = [Axy[:2] for Axy in self.Axy_types]
-        fracs = [q[q.type==Axy].area.sum() for Axy in self.Axy_types]
+        labels = [Axy[:2] for Axy in self._Axy_types]
+        fracs = [q[q.type==Axy].area.sum() for Axy in self._Axy_types]
         explode=(0.05, 0, 0, 0)
         ax.pie(fracs, explode=explode, labels=labels, colors=colors[1:],
                 autopct='%1.1f%%', shadow=True, startangle=90)
@@ -230,10 +229,42 @@ class Clusters:
             for i in range(n_experiments):
                 n_fig = np.floor(i/np.float(Ncols)).astype(np.int)
                 ax = axs_i[n_fig][0,i%Ncols]
-                print(n_fig, i%Ncols)
                 ax_coords = 0, cols, h_min[i] + dh_max, h_min[i]
                 ax.axis(ax_coords)
         plt.show()
+
+    def plot_area_vs_length(self, min_size=0):
+        fig, axs = plt.subplots(3, 2, sharey=True, sharex=True, squeeze=False)
+        q = self.all_sub_clusters
+        q = q[q.area > min_size]
+        colors_line = ['r', 'b', 'g']
+        colors_bullet = [[1,0.5,0.5], [0.5,0.5,1], [0.5,1,0.5]]
+        ls = ["l_0", "L_{lin}"]
+        for i, Axy in enumerate(self._Axy_types[:3]):
+            qq = q[q.type==Axy]
+            qq = qq[qq.success==True]
+            for j,qx in enumerate([qq.l0, qq.L_linear]):
+                ax = axs[i,j]
+                ax.loglog(qx, qq.area, 'o', label="type = %s" % Axy, color=colors_bullet[i])
+                #x,y = np.log10(qx), np.log10(qq.area)
+                q2 = np.vstack((qx, qq.area)).transpose()
+                x,y = gLD.averageLogDistribution(q2, log_step=0.125)
+                ax.plot(x, y, 'o', ms=10, color=colors_line[i])
+                x,y = np.log10(x), np.log10(y)
+                e, c = np.polyfit(x[2:],y[2:],1)
+                x = 10**np.sort(x)
+                ax.plot(x,10**c*x**e, '-', lw=2, color=colors_line[i], label="slope = %.2f" % e)
+                ax.grid(True)
+                ax.legend(numpoints=1, loc=4)
+            axs[i,0].set_ylabel("Cluster area", fontsize=22)
+        for j in range(2):
+            ax = axs[2,j]
+            ax.set_xlabel(r"Cluster length $%s$" % ls[j], fontsize=22)
+
+                
+
+        plt.show()
+
 
 
     def get_global_stats(self):
@@ -241,7 +272,7 @@ class Clusters:
         self.all_clusters = pd.concat([self.cluster_data[cl] for cl in self.cluster_data])
         self.all_sub_clusters = pd.concat([self.sub_cluster_data[cl] for cl in self.sub_cluster_data])
         self.total_area = np.sum(self.all_clusters.area)
-        for Axy in self.Axy_types:
+        for Axy in self._Axy_types:
             q = self.all_sub_clusters[self.all_sub_clusters.type==Axy]['area']
             s = q.sum()
             print("Type %s: fraction of area covered is %.2f" % 
@@ -301,13 +332,14 @@ if __name__ == "__main__":
     plt.close("all")
     imParameters = {}
     choice = sys.argv[1]
-        # As on May 24, this is the example to followcl
+    # As on June 26, this is the example to followcl
     # Added hdf5=True
-    if choice == 'IEF_old_20um':
+    if choice == 'IEF_old':
         # Example: 
-        set_current, n_wire = sys.argv[2:]
+        # run mokas_cluster_distributions.py IEF_old 20um 0.145A 1
+        width, set_current, n_wire = sys.argv[2:]
         fname = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/Ta_CoFeB_MgO_wires_IEF_old.hdf5"
-        grp0  = "20um/%s/10fps/wire%s" % (set_current, n_wire)
+        grp0  = "%s/%s/10fps/wire%s" % (width, set_current, n_wire)
         if not os.path.isfile(fname):
             print("Chech the path")
             sys.exit()
@@ -317,4 +349,5 @@ if __name__ == "__main__":
         clusters.get_experiment_stats()
         clusters.get_global_stats()
         clusters.plot_global_stats(color=color)
-        clusters.plot_cluster_maps(color=color, whiter=0.5)
+        clusters.plot_cluster_maps(color=color, whiter=0.7)
+        clusters.plot_area_vs_length()

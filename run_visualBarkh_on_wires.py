@@ -90,7 +90,7 @@ class RunWires:
             #                          invert_y_axis=False, plot_rays=False,
             #                          fig=self.fig3, ax=self.axs3[n], title=title)
             #imArray.get_stats_prop()
-            imArray.getEventsAndClusters(cluster_threshold=30)
+            imArray.getEventsAndClusters(get_clusters_method='limits', cluster_threshold=30)
             # TO BE FIXED
             axs = self.axs3[n,0], self.axs3[n,1], self.axs3[n,2]
             imArray.plot_cluster_maps(imArray._colorMap, zoom_in_data=True, 
@@ -180,32 +180,24 @@ if __name__ == "__main__":
         wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
 
-    # As on May 24, this is the example to follow
+    # As on June 26, this is the example to follow
     # Added hdf5=True
-    elif choice == 'IEF_old_20um':
-        set_current = sys.argv[2]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_%sA" % set_current
+    elif choice == 'IEF_old':
+        # example
+        # run run_visualBarkh_on_wires IEF_old 20um 0.145
+        width, set_current = sys.argv[2:]
+        string_set = (width, width, set_current)
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/%s/%s_%sA" % string_set
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
-        subdir_pattern = "20um_%sA_10fps_*"  % set_current
-        n_wire = 1
+        subdir_pattern = "%s_%sA_10fps_*"  % (width, set_current)
+        n_wire = 2
         wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
-        #wires.save_hdf5()
-        #wires.save_figs()
+        wires.save_hdf5()
+        wires.save_figs()
 
-    elif choice == 'IEF_old_200um':
-        set_current = "0.14"
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/200um/200um_%sA" % set_current
-        if not os.path.isdir(rootDir):
-            print("Chech the path")
-            sys.exit()
-        subdir_pattern = "200um_%sA_10fps_*"  % set_current
-        filename_suffix = "_MMStack_Pos0.ome.tif"
-        n_wire = 1
-        wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
-        wires.plot_results()
 
     elif choice == 'IEF_new_20um':
         set_current = sys.argv[2]
