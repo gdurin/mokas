@@ -184,60 +184,42 @@ if __name__ == "__main__":
     # Added hdf5=True
     elif choice == 'IEF_old':
         # example
-        # run run_visualBarkh_on_wires IEF_old 20um 0.145
-        width, set_current = sys.argv[2:]
-        string_set = (width, width, set_current)
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/%s/%s_%sA" % string_set
+        # run run_visualBarkh_on_wires IEF_old 20um 0.145 2
+        width, set_current, n_wire = sys.argv[2:]
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
         subdir_pattern = "%s_%sA_10fps_*"  % (width, set_current)
-        n_wire = 2
-        wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
-        wires.plot_results()
-        wires.save_hdf5()
-        wires.save_figs()
 
-
-    elif choice == 'IEF_new_20um':
-        set_current = sys.argv[2]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_new/20um_%sA" % set_current
+    elif choice == 'LPN':
+        # example
+        # run run_visualBarkh_on_wires IEF_old 20um 0.145 2
+        width, set_current, n_wire = sys.argv[2:]
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
-        subdir_pattern = "20um_%sA_10fps_*"  % set_current
-        n_wire = 1
-        wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
-        wires.plot_results()
+        subdir_pattern = "%s_%sA_10fps_*"  % (width, set_current)
 
-
-    elif choice == 'irr':
-        set_current = ["0.19","0.21","0.23"][0]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Irradiated/run1_2/"
-        subdir_pattern = "*_irradiatedwires_%sA_10fps"  % set_current
-
-        #imParameters['imCrop'] = (0,1392,0,1040)
-        #imParameters['imCrop'] = (876,1117,0,1040)
-        crop_upper_left_pixel = (880,0)
-        crop_lower_right_pixel = (1115,1040)
-        imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
-        #imParameters['imCrop'] = None
-        filename_suffix = "_MMStack_Pos0.ome.tif"
-        #imParameters['pattern'] = "01_irradiatedwires_%sA_10fps_MMStack_Pos0.ome.tif" % set_current
-        imParameters['firstIm'] = 1
-        imParameters['lastIm'] = 240
-        imParameters['filtering'] = 'gauss'
-        #imParameters['filtering'] = None
-        imParameters['sigma'] = 1.5
-        threshold = 10
-        wires = RunWires(rootDir, subdir_pattern, filename_suffix, imParameters, threshold, experiments=range(2))
-        wires.plot_results()
-
+    elif choice == 'IEF_new':
+        # example
+        # run run_visualBarkh_on_wires IEF_new 20um 0.14 2
+        width, set_current, n_wire = sys.argv[2:]
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
+        if not os.path.isdir(rootDir):
+            print("Chech the path")
+            sys.exit()
+        subdir_pattern = "%s_%sA_10fps_*"  % (width, set_current)
 
     else:
         print("Check the path!")
         sys.exit()
-
+    n_wire = np.int(n_wire)
+    wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
+    wires.plot_results()
+    wires.save_hdf5()
+    wires.save_figs()
         
         
 

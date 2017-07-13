@@ -65,6 +65,7 @@ class Wires(StackImages):
         imParameters['exclude_switches_from_central_domain'] = False # Do not change
         # By default we get rid of the switched calculated out of the final domain
         imParameters['exclude_switches_out_of_final_domain'] = True
+        imParameters['kernel_half_width_of_ones'] = 15
         StackImages.__init__(self, **imParameters)
         self.motion = motion
         self.rotation = imParameters['rotation']

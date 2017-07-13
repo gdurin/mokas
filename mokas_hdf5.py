@@ -79,12 +79,12 @@ class RootHdf5:
                 print("Updating the signature")
                 grp0.attrs.update(**signature_hdf5)
             # TODO: check the signature too
-            self.is_row_images = 'images' in grp0
+            self.is_raw_images = 'images' in grp0
         
-    def load_row_images(self):
+    def load_raw_images(self):
         with h5py.File(self.fname, 'r') as f:
             grp0 = f[self.baseGroup]
-            if self.is_row_images:
+            if self.is_raw_images:
                 images = grp0['images'][...]
                 imageNumbers = grp0['imageNumbers'][...]
             else:
@@ -119,7 +119,7 @@ class RootHdf5:
             f.flush()
         return True
 
-    def save_row_images(self, images, imageNumbers, dtype=np.int16):
+    def save_raw_images(self, images, imageNumbers, dtype=np.int16):
         """
         Save the images as numpy 3D arrays
         with the imageNumbers array
@@ -161,8 +161,11 @@ class RootHdf5:
     
 if __name__ == "__main__":
     import scipy.misc
-    root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2"
-    pattern = "20um_0.145A_10fps_2_MMStack_Pos0.ome.tif"
+    #root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2"
+    #pattern = "20um_0.145A_10fps_2_MMStack_Pos0.ome.tif"
+    root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/01_Irr_800uC_0.116A"
+    pattern = "01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+    
     signature = {'firstIm':0, 'lastIm':-1, 'crop':None, 
                 'rotation':None, 'filtering':'gauss', 'sigma':1, 'user':'Arianna', 'n_wire':'wire1'}
     rd = RootHdf5(root_dir, pattern, signature)
@@ -171,5 +174,5 @@ if __name__ == "__main__":
     image = image[np.newaxis,...]
     images = np.vstack((image, image))
     imageNumbers = range(1,3,1)
-    success = rd.save_images(2*images, imageNumbers)
+    success = rd.save_raw_images(2*images, imageNumbers)
     success = rd.save_cluster2D(images)

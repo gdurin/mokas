@@ -217,15 +217,20 @@ class EventsAndClusters():
                     switches_at_edge = np.extract(cluster_edge, cluster2D_end)
                     if sw_next in switches_at_edge:
                         cluster2D_end[cluster] = sw_next
+                        cluster2D_start[cluster] = sw_in
 
-        for switch in cluster_switches:
-            q = cluster2D_end == switch
-            clusters, n_cluster = mahotas.label(q, self.NNstructure)
-            for i in range(1, n_cluster+1):
-                cluster = clusters == i
-                cluster2D_start[cluster] = np.min(self.switch2D[cluster]) 
+        # Update the cluster_start
+        # This is done in the line above!
+
+        # for i, switch in enumerate(sw_fin):
+        #     q = cluster2D_end == switch
+        #     clusters, n_cluster = mahotas.label(q, self.NNstructure)
+        #     for i in range(1, n_cluster+1):
+        #         cluster = clusters == i
+        #         cluster2D_start[cluster] = np.min(self.switch2D[cluster]) 
 
         # pass II
+        # With the procedure above all the cluster2D_start have a value sw_in 
         n_cluster_limits = len(cluster_limits)
         for i, (sw_in, sw_fin) in enumerate(cluster_limits):
             main_cluster_size = np.sum(cluster2D_start == sw_in)
@@ -244,6 +249,7 @@ class EventsAndClusters():
                 size_cluster = np.sum(cluster)
                 if size_cluster > main_cluster_size:
                     cluster2D_start[cluster] = sw_in
+                    cluster2D_end[cluster] = sw_fin
                 main_cluster_size = size_cluster # update the largest cluster size
 
         return cluster2D_start, cluster2D_end

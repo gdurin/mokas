@@ -18,7 +18,7 @@ if __name__ == "__main__":
         print k
         k = str(k).rjust(2,"0")
         rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/%s_Irr_800uC_0.116A" % k
-        
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/%s_Irr_800uC_0.116A" % k
         imParameters['pattern'] = "%s_Irr_800uC_0.116A_MMStack_Pos0.ome.tif" % k
         crop_upper_left_pixel, crop_lower_right_pixel = (450,330), (860,750)
         print(imParameters['pattern'])
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         erase_small_events_percent = None
         imParameters['resize_factor'] = None
         # Kernel setups: do not touch
-        imParameters['kernel_half_width_of_ones'] = 10
+        imParameters['kernel_half_width_of_ones'] = 15
         #imParameters['kernel_internal_points'] = 0
         #imParameters['kernel_switch_position'] = "end"
         ##############################

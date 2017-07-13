@@ -36,7 +36,8 @@ def get_liza_colors(color='green', whiter=0.6):
         c00 = mpl_colors.hex2color("#1C1F39")
         c01 = mpl_colors.hex2color("#CBA465")
         c10 = mpl_colors.hex2color("#7E6647")
-        c11 = mpl_colors.hex2color("#356975")
+        #c11 = mpl_colors.hex2color("#356975") # It's too dark
+        c11 = mpl_colors.hex2color("#98BEC7")
         if whiter is not None:
             c00 = [0.5*(c+whiter) for c in c00]    
     if whiter is not None:

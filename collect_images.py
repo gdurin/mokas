@@ -402,12 +402,12 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, crop=None, rotation=No
             for key, item in hdf5_signature.iteritems():
                 signature[key] = item
         hdf5_data = mhdf5.RootHdf5(root_dir, pattern, signature)
-        if not hdf5_data.is_row_images:
+        if not hdf5_data.is_raw_images:
             images, imageNumbers = _collect_images(signature0)
-            hdf5_data.save_row_images(images, imageNumbers)
+            hdf5_data.save_raw_images(images, imageNumbers)
         else:
             print("Loading data from hdf5 file")
-            images, imageNumbers = hdf5_data.load_row_images()
+            images, imageNumbers = hdf5_data.load_raw_images()
     else:
         images, imageNumbers = _collect_images(signature0)
 

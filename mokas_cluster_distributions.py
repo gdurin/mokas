@@ -12,7 +12,8 @@ import heapq
 import mokas_cluster_methods as cmet
 import mahotas
 from mokas_colors import get_liza_colors
-
+import ast
+import mokas_parser as mkp
 
 class Clusters:
 
@@ -27,14 +28,47 @@ class Clusters:
         self._fname = hdf5_filename
         p, filename = os.path.split(hdf5_filename)
         filename, ext = os.path.splitext(filename)
-        self.title = filename + " - " + " - ".join(group.split("/")) + " - %i exps." % len(n_experiments)
+        self.n_experiments = n_experiments
+        self._len_experiments = len(n_experiments)
+        self.title = filename + " - " + " - ".join(group.split("/")) + " - %i exps." % self._len_experiments
         self._baseGroup = group
         self.cluster2D = OrderedDict()
+        self.times = OrderedDict()
         with h5py.File(self._fname, 'a') as f:
-            for n_exp in n_experiments:
-                cluster_dataset = self._baseGroup + "/%i/cluster2D_start" % n_exp
-                grp0 = f[cluster_dataset]
-                self.cluster2D[n_exp] = grp0[...]
+            grp_base = f[self._baseGroup]
+            saved_experiments = len(grp_base)
+            if len(n_experiments) > saved_experiments:
+                print("There are only %i/%i experiments" % (saved_experiments, self._len_experiments))
+                self.n_experiments = self.n_experiments[:saved_experiments]
+            for n_exp in self.n_experiments:
+                grp0 = self._baseGroup + "/%i" % n_exp
+                grp_n_exp = f[grp0]
+                if "cluster2D_start" in grp_n_exp:
+                    self.cluster2D[n_exp] = grp_n_exp['cluster2D_start'][...]
+                else:
+                    print("Cluster2D_start does not exist for exp: %i" % n_exp)
+                # Check if times exist
+                if 'times' in grp_n_exp:
+                    times = grp_n_exp['times'][...]
+                else:
+                    times = self._get_times(grp_n_exp)
+                    grp_n_exp.create_dataset("times", data=times, dtype=np.float16)
+                self.times[n_exp] = times
+                # reaad data of measure
+                if 'mu_per_pixel' in grp_base.attrs.keys():
+                    self.mu_per_pixel = grp_base.attrs['mu_per_pixel']
+                else:
+                    sub_dir = grp_n_exp.attrs['root_dir']
+                    if sub_dir[-1] == '/':
+                        sub_dir, _ = os.path.split(sub_dir[:-1])
+                    else:
+                        sub_dir, _ = os.path.split(sub_dir)
+                    fname_measure = os.path.join(sub_dir, "measure.txt")
+                    p = mkp.Parser(fname_measure)
+                    data = p.get_data()
+                    self.um_per_pixel = data['um_per_pixel']
+                    grp_base.attrs.create('um_per_pixel', self.um_per_pixel)
+
         rows, cols = self.cluster2D[n_exp].shape
         # All the figure have to be roated to get the motion downward
         self.ref_point = (0, cols//2)
@@ -44,11 +78,116 @@ class Clusters:
         if motion == 'downward':
             self.direction = 'Bottom_to_top'
 
+    def _get_times(self, grp):
+        root_dir = grp.attrs['root_dir']
+        pattern = grp.attrs['pattern']
+        pattern = pattern.replace(".ome.tif", "_metadata.txt")
+        fname = os.path.join(root_dir, pattern)
+        with open(fname, 'r') as f: 
+            q = f.read()
+        q = q.replace("null", "False")
+        q = q.replace("false", "False")
+        d = ast.literal_eval(q)
+        times = np.array([float(d[k]["ElapsedTime-ms"]) for k in d if k!='Summary'])
+        times.sort()
+        times = (times - times[0]) / 1000.
+        return times
+
+    def angle_persistence(self, delta_angle=0):
+        """
+        Analyse a pandas.dataframe to seek
+        persistence of angles at the edges
+        """
+        ap = [pd.DataFrame(), pd.DataFrame()]
+        lifetimes = ['lifetime_a10', 'lifetime_a01']
+        for n_exp in self.n_experiments:
+            df_n_exp = self.cluster_data[n_exp]
+            switch_times = df_n_exp.switch_time
+            dfs_n_exp = [df_n_exp.a_10, df_n_exp.a_01]
+            for i in range(2):
+                df = pd.DataFrame()
+                angle = dfs_n_exp[i]
+                # Calculate start and end
+                diff = angle.diff()
+                # A point is both the start and the end of the previous value
+                q = np.logical_and((abs(diff)>delta_angle), (pd.notnull(diff)))
+                times = switch_times[q]
+                deltas = times.diff()
+                deltas = deltas.shift(-1)
+                df[angle.name] = angle[q]
+                df[lifetimes[i]] = deltas
+                ap[i] = pd.concat([ap[i], df])
+        return ap
+
+
+
+
+    def get_front_params(self, cluster, n_fit=30):
+        """
+        get the parameters of the DW front:
+        angles, positions at edges, curvature
+        """
+        cnts = self._select_contour(cluster)
+        rows, cols = cluster.shape
+        X, Y = cnts[:,1], cnts[:,0]
+        ####################################
+        # Left edge
+        ####################################
+        z = np.polyfit(X[:n_fit], Y[:n_fit], 1)
+        z0 = np.arctan(z[0])
+        angle_left = np.abs(z0) * 180 / np.pi
+        ####################################
+        # Right edge
+        ####################################
+        z = np.polyfit(X[-n_fit:], Y[-n_fit:], 1)
+        z0 = np.arctan(z[0])
+        angle_right = abs(z0) * 180 / np.pi
+        ####################################
+        # Curvature, vertex, and deltas
+        ####################################
+        a, b, c = np.polyfit(X, Y, 2)
+        r_curvature = -1./a
+        straightness = self.get_straightness(cnts)
+        x_v = - b / (2 * a)
+        y_v = - b * b / (4 * a) + c
+        c_right = a * cols * cols + b * cols + c
+        row_of_min = np.max(Y) # Yeah, it is correct
+        y_left, y_right = Y[0], Y[-1]
+        if X[0] != 0:
+            y_left, y_right = y_right, y_left
+        delta_left = np.abs((y_left) - row_of_min)
+        delta_right = np.abs((y_right) - row_of_min)
+        l_front = cmet.get_length(cnts)
+        params = [angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right]
+        params += [delta_left, delta_right, l_front]
+        return params
+
+    def get_straightness(self, cnts, method='linear'):
+        """
+        Methods: 
+        cov
+        https://gis.stackexchange.com/questions/16322/measuring-straightness-of-a-curve-segment-represented-as-a-polyline
+        linear
+        Take a straight linear between the first and the last point and 
+        calculate the sqrt(mean(error**2))
+        """
+        if method == 'cov':
+            q = np.cov(cnts.transpose())
+            eigenvalues, eigenvectors = np.linalg.eigh(q)
+            return eigenvalues[0]
+        elif method == 'linear':
+            X, Y = cnts[:,1], cnts[:,0]
+            m = (Y[-1]-Y[0]) / (X[-1]-X[0])
+            c = Y[0]- m * X[0]
+            y = m*X + c
+            return np.mean((Y-y)**2)**0.5
+
     def get_experiment_stats(self):
         print("Get the statistics for each experiment")
         self.cluster_data = dict()
         self.sub_cluster_data = dict()
         self.cluster2D_color = dict()
+        self.last_switch = dict()
         ######################################
         for n_exp in self.cluster2D:
             print("Experiment: %i" % n_exp)
@@ -60,32 +199,49 @@ class Clusters:
             cluster_switches = np.unique(cluster2D)[self.skip_first_clusters+1:]
             cluster = np.logical_and((cluster2D > 0), cluster2D < cluster_switches[0])
             rows, cols = cluster2D.shape
+            is_not_transient = False
             for switch in cluster_switches:
                 #print(switch)
                 cluster0 = cluster2D == switch
                 cluster += cluster0
-                cluster_type = gal.getAxyLabels(cluster0, self.direction, 1)[0]
+                cluster0_type = gal.getAxyLabels(cluster0, self.direction, 1)[0]
                 # We need to check if the cluster is touching the top/bottom edge
                 # i.e. we check the last two elements of the cluster_type
-                if '1' in cluster_type[2:]:
+                if '1' in cluster0_type[2:]:
                     self.cluster2D_color[n_exp][cluster0] = -1
                     continue
-                angle_left, angle_right = self.get_angles(cluster)
-                # Get and plor the curvature
-                cnts = self._select_contour(cluster)
-                X, Y = cnts[:,1], cnts[:,0]
-                a, b, c = np.polyfit(X, Y, 2)
-                r_curvature = -1./a
-                x_v = - b / (2 * a)
-                y_v = - b * b / (4 * a) + c
-                c_right = a * cols * cols + b * cols + c
-                row_of_min = np.max(Y) # Yeah, it is correct
-                y_left, y_right = Y[0], Y[-1]
-                if X[0] != 0:
-                    y_left, y_right = y_right, y_left
-                delta_left = np.abs((y_left) - row_of_min)
-                delta_right = np.abs((y_right) - row_of_min)
-                l_front = cmet.get_length(cnts)
+                area = np.sum(cluster0)
+                if area < self.min_size:
+                    self.cluster2D_color[n_exp][cluster0] = -1
+                    continue
+                last_switch = switch
+                # We need to wait untile the full cluster touches both edges
+                cluster_type = gal.getAxyLabels(cluster, self.direction, 1)[0]
+                if is_not_transient:
+                    front_params = self.get_front_params(cluster)
+                else:
+                    if cluster_type == '1100':
+                        is_not_transient = True
+                        front_params = self.get_front_params(cluster)
+                    else:
+                        # Use a trick to get the initial front
+                        im, n_clusters = mahotas.label(cluster2D==-1, np.ones((3,3)))
+                        sizes = mahotas.labeled.labeled_size(im)[1:]
+                        try:
+                            ind = np.argpartition(sizes, -2)[-2:]
+                        except:
+                            ind = [0]
+                        for i in ind:
+                            cl = im==i+1
+                            cl_type = gal.getAxyLabels(cl, self.direction, 1)[0]
+                            if cl_type == '1101': #Yeah it is correct
+                                self.upper_cluster = np.logical_or(cl, cluster)
+                                front_params = self.get_front_params(self.upper_cluster)
+                angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right = front_params[:8]
+                delta_left, delta_right, l_front = front_params[8:]
+                # if is_not_transient:
+                #     angle_left, angle_right, r_curvature, x_v, y_v, c, c_right = 7 * [np.NaN]
+                #     delta_left, delta_right, l_front = 3 * [np.NaN]
 
                 # Here there is a problem
                 # Cluster0 can be made of 2 or more subclasters (this is not uncommon)
@@ -93,13 +249,15 @@ class Clusters:
                 sub_clusters, n_sub_clusters = mahotas.label(cluster0, np.ones((3,3)))
                 # Save the data
                 cluster_data['n_exp'].append(n_exp)
-                cluster_data['switch'].append(switch)
-                cluster_data['type'].append(cluster_type)
-                cluster_data['area'].append(np.sum(cluster0))
+                cluster_data['switch_frame'].append(switch)
+                cluster_data['switch_time'].append(self.times[n_exp][switch])
+                cluster_data['type'].append(cluster0_type)
+                cluster_data['area'].append(area)
                 cluster_data['n_sub_cl'].append(n_sub_clusters)
                 cluster_data['a_01'].append(angle_left)
                 cluster_data['a_10'].append(angle_right)
                 cluster_data['r_curv'].append(r_curvature)
+                cluster_data['straightness'].append(straightness)
                 cluster_data['x_v'].append(x_v)
                 cluster_data['y_v'].append(y_v)
                 cluster_data['c_left'].append(c)
@@ -128,7 +286,8 @@ class Clusters:
                                                 self.ref_point, motion=self.motion)
                     if success is True:
                         l0, l1 = cmet.get_length(l0), cmet.get_length(l1)
-                    sub_cluster_data['switch'].append(switch)
+                    sub_cluster_data['switch_frame'].append(switch)
+                    sub_cluster_data['switch_time'].append(self.times[n_exp][switch])
                     sub_cluster_data['type'].append(sub_cluster_type)
                     sub_cluster_data['area'].append(area)
                     sub_cluster_data['l0'].append(l0)
@@ -136,71 +295,80 @@ class Clusters:
                     sub_cluster_data['L_linear'].append(L_linear)
                     sub_cluster_data['success'].append(success)
 
-            cluster_cols = ['n_exp', 'switch', 'type', 'area', 'n_sub_cl',
-                            'a_10', 'a_01', 'r_curv', 'x_v', 'y_v',
+            self.last_switch[n_exp] = last_switch
+            cluster_cols = ['n_exp', 'switch_frame', 'switch_time', 'type', 'area', 'n_sub_cl',
+                            'a_10', 'a_01', 'r_curv', 'straightness', 'x_v', 'y_v',
                             'c_left', 'c_right', 'delta_left', 'delta_right',
                             'l_front']
             df = pd.DataFrame.from_dict(cluster_data)
             self.cluster_data[n_exp] = df[cluster_cols]
-            sub_cluster_cols = ['switch', 'type', 'area', 'l0', 'l1', 'L_linear', 'success']
+            sub_cluster_cols = ['switch_frame', 'switch_time','type', 'area', 'l0', 'l1', 'L_linear', 'success']
             df = pd.DataFrame.from_dict(sub_cluster_data)
             self.sub_cluster_data[n_exp] = df[sub_cluster_cols]
             del df
             
-    def plot_global_stats(self, color='red', whiter=.5):
-        colors, cmap = get_liza_colors(color, whiter)
+    def plot_global_stats(self, curvature='straightness',color='red', whiter=.5):
+        clrs, cmap = get_liza_colors(color, whiter)
         # Do it only after exp and global stats
         fig, axs = plt.subplots(2,2)
         q = self.all_clusters
         # Plot the hist of the curvature
         ax = axs[0,0]
-        c = q.r_curv
-        n, bins, patches = ax.hist(c, bins=100, facecolor='green', alpha=0.75)
-        ax.set_xlabel("Radius of Curvature")
-        ax.set_title(r'${R.\ of\ Curvature:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
+        if curvature == 'straightness':
+            c = q.straightness.dropna()
+            n, bins, patches = ax.hist(c, bins=100, facecolor=clrs[4], alpha=0.75)
+            ax.set_xlabel("Straighness")
+            ax.set_title(r'${Straightness:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
+        elif curvature == 'radius':
+            c = q.r_curv.dropna()
+            n, bins, patches = ax.hist(c, bins=300, range=(0,3000), facecolor=clrs[4], alpha=0.75)
+            ax.set_xlabel("Radius of Curvature")
+            ax.set_title(r'${R.\ of\ Curvature:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
         # Plot the pie
         ax = axs[0,1]
         labels = [Axy[:2] for Axy in self._Axy_types]
         fracs = [q[q.type==Axy].area.sum() for Axy in self._Axy_types]
         explode=(0.05, 0, 0, 0)
-        ax.pie(fracs, explode=explode, labels=labels, colors=colors[1:],
-                autopct='%1.1f%%', shadow=True, startangle=90)
+        textprops = {'fontsize':16}
+        _, _, autotexts= ax.pie(fracs, explode=explode, labels=labels, colors=clrs[1:],
+                autopct='%1.1f%%', shadow=True, startangle=90, textprops=textprops)
+        for autotext in autotexts:
+            autotext.set_color('white')
         ax.axis('equal')
         # Plot the hist of the left angle
         ax = axs[1,0]
         c = q.a_10
-        n, bins, patches = ax.hist(c, bins=100, facecolor='blue', alpha=0.75)
+        n, bins, patches = ax.hist(c, bins=90, range=(0,90), facecolor=clrs[3], alpha=0.75)
         ax.set_xlabel("Left angle (degree)")
         ax.set_title(r'$\mathrm{Left\ angle:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
         ax = axs[1,1]
         c = q.a_01
-        n, bins, patches = ax.hist(c, bins=100, facecolor='purple', alpha=0.75)
+        n, bins, patches = ax.hist(c, bins=90, range=(0,90), facecolor=clrs[2], alpha=0.75)
         ax.set_xlabel("Right angle (degree)")
         ax.set_title(r'$\mathrm{Right\ angle:}\ \mu=%.2f,\ \sigma=%.2f$' % (c.mean(), c.std()))
-        plt.suptitle(self.title, fontsize=20)
+        fig.suptitle(self.title, fontsize=20)
         ##########
         plt.show()
 
-    def plot_cluster_maps(self, color='red', whiter=0.5, zoom_in_data=True):
-        Ncols = 5
-        colors, cmap = get_liza_colors(color, whiter)
-        n_experiments = len(self.cluster2D)
-        n_figs = np.int(np.ceil(float(n_experiments)/Ncols))
+    def plot_cluster_maps(self, color='red', whiter=0.5, zoom_in_data=True, Ncols=5):
+        clrs0, cmap = get_liza_colors(color, whiter)
         figs, axs_i = [], []
-        if n_experiments >= Ncols:
-            n = Ncols
-        else:
-            n = n_experiments
-        for i in range(n_figs):
+        n_figs = np.int(np.ceil(float(self._len_experiments)/Ncols))
+        r = self._len_experiments % Ncols
+        ns = self._len_experiments//Ncols*[Ncols] + [r]*(r>0)
+        for n in ns:
             fig, axs = plt.subplots(1, n, sharey=False, squeeze=False)
             figs.append(fig)
             axs_i.append(axs)
 
         dh_max = 0
         h_min = []
+        v_s = []
         for i, n_exp in enumerate(self.cluster2D_color):
             cluster2D_color = self.cluster2D_color[n_exp]
             cluster2D = self.cluster2D[n_exp]
+            times = self.times[n_exp]
+            rows, cols = cluster2D.shape
             n_fig = np.int(i/Ncols)
             n_ax = i % Ncols
             ax = axs_i[n_fig][0,n_ax]
@@ -208,7 +376,6 @@ class Clusters:
                 rows_mean_sw = np.mean(cluster2D, axis=1)
                 jj = np.where(rows_mean_sw != -1)
                 i0, i1 = np.min(jj) - 20, np.max(jj) + 20
-                rows, cols = cluster2D.shape
                 if i0 < 0:
                     i0 = 0
                 if i1 > rows:
@@ -217,20 +384,52 @@ class Clusters:
                 if dh > dh_max:
                     dh_max = dh
                 h_min.append(i0)
+            # Check if all the cluster_types are present!
+            clrs = clrs0[:1] + [clrs0[i+1] for i in range(4) if i in cluster2D_color]
+            cmap = colors.ListedColormap(clrs,'liza')
             ax.imshow(cluster2D_color, cmap=cmap, interpolation='nearest')
-            for switch in np.unique(cluster2D)[1:]:
+            switches = np.unique(cluster2D)[1:]
+            for switch in switches:
                 cluster = cluster2D==switch
                 cnts = measure.find_contours(cluster, 0.5)
                 for cnt in cnts:
                     X,Y = cnt[:,1], cnt[:,0]
                     ax.plot(X, Y, c='k', antialiased=True, lw=1)
-            ax.set_title("Exp. n. %i" % n_exp)
-        if zoom_in_data:
-            for i in range(n_experiments):
-                n_fig = np.floor(i/np.float(Ncols)).astype(np.int)
-                ax = axs_i[n_fig][0,i%Ncols]
+            # Calculate the velocities
+            #cluster = cluster2D < switches[0]
+            cluster = np.logical_or((cluster2D == -1), (cluster2D>self.last_switch[n_exp]))
+            cnts = measure.find_contours(cluster, 0.5)
+            lens = [len(cnt) for cnt in cnts]
+            l_values = heapq.nlargest(2, lens)
+            i_s = [lens.index(l) for l in l_values]
+            d = []
+            for i in i_s:
+                X,Y = cnts[i][:,1], cnts[i][:,0]
+                meanY = np.mean(Y)
+                d.append(meanY)
+                ax.plot(X, meanY*X/X, '--w', antialiased=True, lw=2)
+            print(d)
+            distance_pixel = np.abs(d[1]-d[0])
+            delta_time = times[self.last_switch[n_exp]] - times[switches[0]]
+            print(distance_pixel, delta_time)
+            v = distance_pixel / delta_time * self.um_per_pixel
+            print(n_exp, v)
+            v_s.append(v)
+            ax.set_title("[%i] v:%.2f um/s" % (n_exp,v))
+        v_mean = np.mean(v_s)
+        v_error = np.std(v_s) / len(v_s)**0.5
+        print("Average velocity: %.3f +/- %.3f (um/s)" % (v_mean, v_error))
+
+        for i in range(self._len_experiments):
+            n_fig = np.floor(i/np.float(Ncols)).astype(np.int)
+            ax = axs_i[n_fig][0,i%Ncols]
+            if zoom_in_data:
                 ax_coords = 0, cols, h_min[i] + dh_max, h_min[i]
-                ax.axis(ax_coords)
+            else:
+                ax_coords = 0, cols, rows, 0
+            ax.axis(ax_coords)
+        for fig in figs:
+            fig.suptitle(self.title, fontsize=20)
         plt.show()
 
     def plot_area_vs_length(self, min_size=0):
@@ -259,10 +458,8 @@ class Clusters:
             axs[i,0].set_ylabel("Cluster area", fontsize=22)
         for j in range(2):
             ax = axs[2,j]
-            ax.set_xlabel(r"Cluster length $%s$" % ls[j], fontsize=22)
-
-                
-
+            ax.set_xlabel(r"Cluster length $%s$" % ls[j], fontsize=22)        
+        plt.suptitle(self.title, fontsize=20)
         plt.show()
 
 
@@ -308,25 +505,39 @@ class Clusters:
         """
         select the two longest contours in a list
         then get the one corresponding to the position
+        Care has to be used with initial cluster,
+        which are typical of 1101 type
         """
         cnts = measure.find_contours(cluster, 0.5)
         lens = [len(cnt) for cnt in cnts]
-        l_values = heapq.nlargest(2, lens)
-        i0, i1 = [lens.index(l) for l in l_values]
-        if l_values[0] == l_values[1]:
-            i1 = len(lens) - 1 - lens[::-1].index(l_values[0])
-        Y0, Y1 = cnts[i0][:,0], cnts[i1][:,0]
-        m0, m1 = np.mean(Y0), np.mean(Y1)
-        if m0 > m1:
-            l_bottom = cnts[i0]
-            l_top = cnts[i1]
+        cl_type = gal.getAxyLabels(cluster, self.direction, 1)[0]
+        if len(lens) >= 2:
+            l_values = heapq.nlargest(2, lens)
+            if cl_type == '1101':
+                i0 = lens.index(l_values[0])
+                return cnts[i0]
+            else:
+                i0, i1 = [lens.index(l) for l in l_values]
+                if l_values[0] == l_values[1]:
+                    i1 = len(lens) - 1 - lens[::-1].index(l_values[0])
+                Y0, Y1 = cnts[i0][:,0], cnts[i1][:,0]
+                m0, m1 = np.mean(Y0), np.mean(Y1)
+                if m0 > m1:
+                    l_bottom = cnts[i0]
+                    l_top = cnts[i1]
+                else:
+                    l_bottom = cnts[i1]
+                    l_top = cnts[i0]
+                if position == 'bottom':
+                    return l_bottom
+                else:
+                    return l_top    
         else:
-            l_bottom = cnts[i1]
-            l_top = cnts[i0]
-        if position == 'bottom':
-            return l_bottom
-        else:
-            return l_top    
+            # Check if this is the upper cluster
+            if cl_type == '1101':
+                return cnts[0]
+            else:
+                print("There is a problem with ", cl_type)
 
 if __name__ == "__main__":
     plt.close("all")
@@ -334,20 +545,47 @@ if __name__ == "__main__":
     choice = sys.argv[1]
     # As on June 26, this is the example to followcl
     # Added hdf5=True
+    width, set_current, n_wire = sys.argv[2:]
     if choice == 'IEF_old':
         # Example: 
         # run mokas_cluster_distributions.py IEF_old 20um 0.145A 1
-        width, set_current, n_wire = sys.argv[2:]
-        fname = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/Ta_CoFeB_MgO_wires_IEF_old.hdf5"
+        fname = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/Ta_CoFeB_MgO_wires_{0}.hdf5".format(choice)
         grp0  = "%s/%s/10fps/wire%s" % (width, set_current, n_wire)
         if not os.path.isfile(fname):
-            print("Chech the path")
+            print("Check the path")
             sys.exit()
         n_experiments = range(1,11)
         color = 'red'
-        clusters = Clusters(fname, grp0, n_experiments, skip_first_clusters=0, min_size=3)
-        clusters.get_experiment_stats()
-        clusters.get_global_stats()
-        clusters.plot_global_stats(color=color)
-        clusters.plot_cluster_maps(color=color, whiter=0.7)
-        clusters.plot_area_vs_length()
+        min_size = 5
+    elif choice == 'IEF_new':
+        # Example: 
+        # run mokas_cluster_distributions.py IEF_old 20um 0.145A 1
+        fname = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/Ta_CoFeB_MgO_wires_{0}.hdf5".format(choice)
+        grp0  = "%s/%s/10fps/wire%s" % (width, set_current, n_wire)
+        if not os.path.isfile(fname):
+            print("Check the path")
+            sys.exit()
+        n_experiments = range(1,11)
+        #n_experiments = [1]
+        color = 'green'
+        min_size = 5
+    elif choice == 'LPN':
+        # Example: 
+        # run mokas_cluster_distributions.py LPN 20um 0.145A 1
+        fname = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/Ta_CoFeB_MgO_wires_{0}.hdf5".format(choice)
+        grp0  = "%s/%s/10fps/wire%s" % (width, set_current, n_wire)
+        if not os.path.isfile(fname):
+            print("Check the path")
+            sys.exit()
+        n_experiments = [1,2,3,4,5,7,8,9,10] # 6 for .145A is bad
+        color = 'blue'
+        min_size = 5
+
+
+    clusters = Clusters(fname, grp0, n_experiments, skip_first_clusters=0, min_size=min_size)
+    clusters.get_experiment_stats()
+    clusters.get_global_stats()
+    clusters.plot_global_stats(color=color)
+    clusters.plot_cluster_maps(color=color, whiter=0.7, Ncols=10, zoom_in_data=False)
+    clusters.plot_area_vs_length()
+    ap = clusters.angle_persistence(0)
