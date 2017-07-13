@@ -9,6 +9,7 @@ from mokas_colors import get_colors
 from natsort import natsorted
 
 
+
 class RunWires:
     def __init__(self, rootDir, subdir_pattern, n_wire=1, 
                 erase_small_events_percent=None):
@@ -122,16 +123,7 @@ class RunWires:
         self.fig3.savefig(filename)
 
 
-    def _get_averages(self, lengths, sizes):
-        # Calculus of the avalanche sizes and durations
-        average_lengths = np.unique(lengths)
-        average_sizes = []
-        for l in average_lengths:
-            size = np.mean(np.extract(lengths == l, sizes))
-            average_sizes.append(size)
-        average_sizes = np.array(average_sizes)
-        return average_lengths, average_sizes
-
+    
 if __name__ == "__main__":
     plt.close("all")
     imParameters = {}

@@ -133,7 +133,7 @@ class StackImages:
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
-                 kernel_half_width_of_ones = 5, 
+                 kernel_half_width_of_ones = 10, 
                  #kernel_internal_points = 0,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
