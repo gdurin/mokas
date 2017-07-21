@@ -5,12 +5,12 @@ from collections import OrderedDict
 
 dir_logic = {}
 
+#################### Wires ###############################
 # Set the logic of the root_dir of the LAST n items
 # example:
 # /home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2
 dir_logic['Arianna'] = {}
 dir_logic['Arianna']['from_root_dir'] = ['material', 'width', 'width_H', 'baseName']
-# baseName = Ta_CoFeB_MgO_wires_IEF_old
 # baseDir = /home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old
 # width = 20um
 # width_H = 20um_0.145A
@@ -22,6 +22,24 @@ dir_logic['Arianna']['hdf5_dirs'] = ['width', 'H', 'fps', 'n_wire', 'n_exp']
 # 20um_0.145A_10fps_2_MMStack_Pos0.ome.tif
 # nexp = 2
 # fps = 10fps
+#################### Bubbles ###############################
+# Set the logic of the root_dir of the LAST n items
+# example:
+# /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/0.116A/01_Irr_800uC_0.116A
+dir_logic['SuperSlowCreep'] = {}
+dir_logic['SuperSlowCreep']['from_root_dir'] = ['material', 'H', 'baseName']
+# baseDir = /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/
+# H = 0.116A
+# baseName = 01_Irr_800uC_0.116A
+dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'material'
+# Give the logic for the full pattern using "_" as separator
+dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat', 'H', 'MMS', 'Pos0']
+dir_logic['SuperSlowCreep']['hdf5_dirs'] = ['H', 'n_exp']
+# 01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif
+# H = 0.116A
+
+
+
 
 
 class RootHdf5:
@@ -100,7 +118,6 @@ class RootHdf5:
             else:
                 print("No %s data available, please check" % obj)
                 return None
-        
 
     def save_data(self, datas, labels, dtype):
         """

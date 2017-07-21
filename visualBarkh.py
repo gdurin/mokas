@@ -133,7 +133,7 @@ class StackImages:
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
-                 kernel_half_width_of_ones = 5, 
+                 kernel_half_width_of_ones = 10, 
                  #kernel_internal_points = 0,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
@@ -1478,110 +1478,6 @@ class StackImages:
         self._isDistributions = True
         return
 
-    def _groupHdf5(self, fileHdf5, parent, group):
-        """
-        get the group or create if not exists
-        parent can be a string or a group
-        """
-        if type(parent) == tables.group.Group:
-            if parent.__contains__(group):
-                gr = parent._f_getChild(group)
-            else:
-                gr = fileHdf5.createGroup(parent, group, group)
-        else: 
-            _group = os.path.join(parent, group)
-            if not fileHdf5.__contains__(_group):
-                print("Create group: %s" % _group)
-                gr = fileHdf5.createGroup(parent, group, group)
-            else:
-                gr = fileHdf5.getNode(_group)
-        return gr
-    
-    def _nodeHdf5(self, fileHdf5, parent, node, data, data_type=None):
-        """
-        write or rewrite data in a node
-        """
-        # Check if data already exist
-        if not type(parent) == tables.group.Group:
-            pp = fileHdf5.getNode(parent)
-        else:
-            pp = parent
-        if pp.__contains__(node):
-            pp._g_remove(node)
-        arr = fileHdf5.createArray(pp, node, data)
-        if data_type == 'IMAGE':
-            arr._v_attrs['CLASS'] = data_type
-            arr.attrs['IMAGE_SUBCLASS'] = 'IMAGE_TRUECOLOR'
-        return
-    
-    def _getMeasureData(self):
-        measure_file = open(os.path.join(self._mainDir, "measure.txt"))
-        lines = measure_file.readlines()
-        lns = [line.strip() for line in lines if "[X]" in line]
-        for i, camera in enumerate(['Zeiss', "Hamamatsu", "PicoStar"]):
-            for j, line in enumerate(lns):
-                if camera in line:
-                    camera_n = i
-                    camera_line = j
-                    break
-        sizes = re.findall("\d+x\d+", lns[camera_line+1])
-        size = sizes[camera_n]
-        return size
-                  
-    def saveHdf5(self):
-        """
-        Prepare a hdf5 file to
-        save sequences of data with labels ('0000', '1000', etc)
-        save images
-        save experimental details
-        """
-        if not self._isDistributions:
-            self.getDistributions()
-        # Prepare the hdf5 file for saving results
-        outDir = os.path.join(*self._subDirs[:1])
-        mainMat = imArray._subDirs[0].split("/")[-1]
-        f5filename = mainMat + "_results.h5"
-        f5filename = os.path.join(outDir, f5filename)
-        #f5 = h5py.File(f5filename, mode="a", title=mainMat+" results")
-        if os.path.isfile(f5filename):
-            f5 = tables.openFile(f5filename, mode="a")
-        else:
-            f5 = tables.openFile(f5filename, mode="a", title=mainMat+" results")
-        # Prepare the subdir to welcome data
-        fullPath = f5.rootUEP
-        for subDir in self._subDirs[1:]:
-            #gr = gr.create_group(subDir)
-            fullPath = self._groupHdf5(f5, fullPath, subDir)
-        # Add the measurements data to the seq group
-        size = self._getMeasureData()
-        fullPath._v_attrs['IMAGE_SIZE'] = size
-        # Save the data
-        for label in self.dictAxy:
-            # create the 'clus' and 'aval' groups
-            labelGroup = self._groupHdf5(f5, fullPath, label)
-            for Axy in self.dictAxy[label]:
-                data = self.dictAxy[label][Axy]
-                #subGroup.create_dataset(Axy, data=data)
-                aval_type = "A%s" % Axy
-                # Check if data already exist
-                self._nodeHdf5(f5, labelGroup, aval_type, data)
-        # Save images as 24 bit images
-        imagesGroup = self._groupHdf5(f5, fullPath, "images")
-        colors = np.array(self._pColors*255, dtype=np.int16)
-        imColor = colors[self._switchTimes2D]
-        self._nodeHdf5(f5, imagesGroup, "raw_data", self._switchTimes2D)
-        self._nodeHdf5(f5, imagesGroup, "lastmage", imColor, "IMAGE")
-        palettes = ['korean', 'randomKorean', 'ral', 'random', 'randomHue']
-        for palette in palettes:
-            colors = getPalette(self._nImagesWithSwitch, palette, 'black')
-            imColor = colors[self._switchTimes2D]
-            self._nodeHdf5(f5, imagesGroup, palette, imColor, "IMAGE")
-        # Save the histogram
-        hist = zip(self.bins_hist, self.N_hist)
-        self._nodeHdf5(f5, imagesGroup, "hist", hist)
-        f5.flush()
-        f5.close()
-        return
 
     def _max_switch_not_touching_edges(self, sw):
         """

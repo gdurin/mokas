@@ -9,6 +9,41 @@ import getLogDistributions as gLD
 import mokas_events as mke
 import mokas_cluster_methods as mcm
 import mokas_cluster_distributions as mcd
+import configparser
+
+
+
+class Bubbles_ini(object):
+    def __init__(self, filepath):
+        self.imParameters = dict()
+        self.config = configparser.ConfigParser()
+        filename = os.path.join(filepath, "bubbles.ini")
+        if not os.path.isfile(filename):
+            print("Please, prepare a bubbles.ini file")
+        else:
+            print(filename)
+        
+        self.config.read(filename)
+        self.default = self.config['DEFAULT']
+        self.filename_suffix = self.default['filename_suffix']
+        self.imParameters['firstIm'] = int(self.default['firstIm'])
+        self.imParameters['lastIm'] = int(self.default['lastIm'])
+        self.imParameters['filtering'] = self.default['filtering']
+        self.imParameters['sigma'] = float(self.default['sigma'])
+        self.imParameters['hdf5_use'] = self.default['hdf5'] == 'True'
+        if self.imParameters['hdf5_use']:
+            user = self.default['user']
+            self.imParameters['hdf5_signature'] = {'user': user}
+        
+        bubble = self.config['bubble']
+        crop_upper_left_pixel = tuple([int(n) for n in bubble['crop_upper_left_pixel'].split(",")])
+        crop_lower_right_pixel = tuple([int(n) for n in bubble['crop_lower_right_pixel'].split(",")])
+        self.imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]
+        self.experiments = [int(n) for n in bubble['experiments'].split(",")]
+
+        analysis = self.config['analysis']
+        self.thresholds = [float(n) for n in analysis['thresholds'].split(",")]
+
 
 
 class Bubbles(StackImages):
@@ -34,41 +69,45 @@ class Bubbles(StackImages):
         self.cluster2D_start, self.cluster2D_end = out
 
 
-    def plotEventsAndClustersMaps(self):
+    def plotEventsAndClustersMaps(self, fig=None, axs=None):
         try:
             q = self.cluster2D_start
         except:
             print("Run getEventsAndClusters first!")
 
-        clrs = (np.random.rand(2*len(self.switches()),3) + [1,1,1])/2
+        clrs = np.random.rand(2*len(self.switches()),3)
         clrs[0] = [0,0,0]
         cmap = mpl.colors.ListedColormap(clrs)
         
         cluster_switches = np.unique(self.cluster2D_start)[1:]
 
         # Plot
-       
-        fig, axs = plt.subplots(1, 3, sharex=True, sharey=True) # ColorImages of events and clusters
-          
-        axs[0].imshow(self._switchTimes2D, cmap=cmap)
-        axs[1].imshow(self.cluster2D_start, cmap=cmap)
-        axs[2].imshow(self.cluster2D_end, cmap=cmap)
 
-        axs[0].set_title('Events')
-        axs[1].set_title('Clusters start')
-        axs[2].set_title('Clusters end')
+        if not fig:
+            fig, axs = plt.subplots(1, 3, sharex=True, sharey=True) # ColorImages of events and clusters
+            ax0, ax1, ax2 = axs[0], axs[1], axs[2]
+        else:
+            ax0, ax1, ax2 = axs
+           
+        ax0.imshow(self._switchTimes2D, cmap=cmap)
+        ax1.imshow(self.cluster2D_start, cmap=cmap)
+        ax2.imshow(self.cluster2D_end, cmap=cmap)
+
+        ax0.set_title('Events')
+        ax1.set_title('Clusters start')
+        ax2.set_title('Clusters end')
 
         fig.suptitle('Events and clusters', fontsize=20)
 
         rows, cols = self._switchTimes2D.shape
-        axs[0].axis((0,cols,rows,0))
+        ax0.axis((0,cols,rows,0))
         font = {'weight': 'normal', 'size': 8}
         for i in cluster_switches:
             cluster = self.cluster2D_start == i
             cnts = measure.find_contours(cluster, 0.5, fully_connected='high')
             for cnt in cnts:
                 X,Y = cnt[:,1], cnt[:,0]
-                for ax in [axs[0], axs[1], axs[2]]:
+                for ax in [ax0, ax1, ax2]:
                     ax.plot(X, Y, c='k', antialiased=True, lw=1)
 
 

@@ -1,5 +1,6 @@
 import sys, os
 import numpy as np
+from scipy.integrate import trapz
 import getLogDistributions as gLD
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -158,8 +159,17 @@ class Clusters:
         delta_left = np.abs((y_left) - row_of_min)
         delta_right = np.abs((y_right) - row_of_min)
         l_front = cmet.get_length(cnts)
+        # calculate the linear distance between the pinning points at the edges
+        L_linear = ((y_left - y_right)**2 + (X[0]-X[-1])**2)**0.5
+        # Calculate the Delta_Size for a front which is not linear
+        if y_right > y_left:
+            y_min = y_left
+        else:
+            y_min = y_right
+        Delta_S = np.abs(trapz((Y-y_min), X)) - 0.5 * np.abs(y_left - y_right) * cols
+        Delta_L = l_front - L_linear
         params = [angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right]
-        params += [delta_left, delta_right, l_front]
+        params += [delta_left, delta_right, l_front, Delta_L, Delta_S]
         return params
 
     def get_straightness(self, cnts, method='linear'):
@@ -238,7 +248,7 @@ class Clusters:
                                 self.upper_cluster = np.logical_or(cl, cluster)
                                 front_params = self.get_front_params(self.upper_cluster)
                 angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right = front_params[:8]
-                delta_left, delta_right, l_front = front_params[8:]
+                delta_left, delta_right, l_front, Delta_L, Delta_S = front_params[8:]
                 # if is_not_transient:
                 #     angle_left, angle_right, r_curvature, x_v, y_v, c, c_right = 7 * [np.NaN]
                 #     delta_left, delta_right, l_front = 3 * [np.NaN]
@@ -265,6 +275,8 @@ class Clusters:
                 cluster_data['delta_left'].append(delta_left)
                 cluster_data['delta_right'].append(delta_right)
                 cluster_data['l_front'].append(l_front)
+                cluster_data['Delta_L'].append(Delta_L)
+                cluster_data['Delta_S'].append(Delta_S)
                 # Loop over the sub_clusters
                 for label in range(1, n_sub_clusters+1):
                     sub_cluster = sub_clusters == label
@@ -299,7 +311,7 @@ class Clusters:
             cluster_cols = ['n_exp', 'switch_frame', 'switch_time', 'type', 'area', 'n_sub_cl',
                             'a_10', 'a_01', 'r_curv', 'straightness', 'x_v', 'y_v',
                             'c_left', 'c_right', 'delta_left', 'delta_right',
-                            'l_front']
+                            'l_front', 'Delta_L', 'Delta_S']
             df = pd.DataFrame.from_dict(cluster_data)
             self.cluster_data[n_exp] = df[cluster_cols]
             sub_cluster_cols = ['switch_frame', 'switch_time','type', 'area', 'l0', 'l1', 'L_linear', 'success']
@@ -428,6 +440,8 @@ class Clusters:
             else:
                 ax_coords = 0, cols, rows, 0
             ax.axis(ax_coords)
+            if Ncols >= 5:
+                ax.set_xticks(np.linspace(0,cols,3))
         for fig in figs:
             fig.suptitle(self.title, fontsize=20)
         plt.show()
@@ -462,6 +476,19 @@ class Clusters:
         plt.suptitle(self.title, fontsize=20)
         plt.show()
 
+    def plot_0000_distributions(self, log_step=0.125):
+        fig, axs = plt.subplots(1, 3, sharey=True, sharex=True, squeeze=False)
+        subc = self.all_sub_clusters
+        s000 = subc[subc.type == '0000']
+        A000 = s000.area
+        L000 = s000.l0.dropna()
+        # loglog Plot
+        x,y,yerr = gLD.logDistribution(A000, log_step=log_step)
+        ax.xlabel(r"Cluster Area $A_{00}$", size=20)
+        ax.ylabel(r"Cluster Area Distribution $P(A_{00})$", size=20)
+
+        ax.xlabel(r"Cluster length $l_0$", size=20)
+        ax.ylabel(r"Length distribution $P(l_{0})$", size=20)
 
 
     def get_global_stats(self):

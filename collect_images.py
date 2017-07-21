@@ -33,7 +33,7 @@ def natural_key(string_):
 
 class Images:
     """
-    load load images using a pattern (i.e. image*.png) or a movie filename 
+    load images using a pattern (i.e. image*.png) or a movie filename 
 
     Parameters:
     ----------------
