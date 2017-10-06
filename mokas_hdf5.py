@@ -33,7 +33,7 @@ dir_logic['SuperSlowCreep']['from_root_dir'] = ['material', 'H', 'baseName']
 # baseName = 01_Irr_800uC_0.116A
 dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'material'
 # Give the logic for the full pattern using "_" as separator
-dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat', 'H', 'MMS', 'Pos0']
+dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
 dir_logic['SuperSlowCreep']['hdf5_dirs'] = ['H', 'n_exp']
 # 01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif
 # H = 0.116A

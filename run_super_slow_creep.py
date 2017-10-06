@@ -7,8 +7,7 @@ import mokas_bubbles as mkb
 from natsort import natsorted
 import glob, re
 from mokas_colors import get_colors
-
-
+# import deepdish as dd
 
 
 
@@ -112,6 +111,11 @@ class RunBubbles:
             hist = [bubble.N_hist, bubble.bins_hist]
             hist_labels = ['N_hist', 'bins_hist']
             bubble.hdf5.save_data(hist, hist_labels, dtype=np.float32)
+            # Save contours
+            for switch in bubble.switches:
+                bubble.hdf5.save_data(bubble.contours[switch], 'contours/%i' %switch, dtype=np.float32)
+            
+
 
 
     def save_figs(self):
@@ -157,7 +161,7 @@ if __name__ == "__main__":
         #############################################
 
 
-        # imParameters['pattern'] = "%s_Irr_800uC_0.116A_MMStack_Pos0.ome.tif" % k
+        # imParameters['pattern'] = "%s_Irr800uC_0.116A_MMStack_Pos0.ome.tif" % k
         # crop_upper_left_pixel, crop_lower_right_pixel = (450,330), (860,750)
         # print(imParameters['pattern'])
         # imParameters['imCrop'] = [crop_upper_left_pixel, crop_lower_right_pixel]

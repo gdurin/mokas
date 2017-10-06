@@ -302,6 +302,7 @@ class EventsAndClusters():
     #     cluster_durations = np.array([])
     #     cluster_switches = np.unique(clusters)[1:]
     #     for switch in cluster_switches:
+    
     #         clusters, n_cluster = mahotas.label(clusters == switch, self.NNstructure)
     #         sizes = mahotas.labeled.labeled_size(clusters)[1:]
     #         durations = np.array([np.max(np.extract(clusters == i, self.switch2D)) - switch for i in range(1, n_cluster+1)])
@@ -348,7 +349,7 @@ if __name__ == "__main__":
 
     #filenamepkl = "switchTimes2D.pkl"
     #filename = "switch2D_test.pkl"
-    if mtype == "Irr800":
+    if mtype == "Irr_800":
         rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/02_Irr_800uC_0.116A"
         #subDir = "NonIrr_0.095A_3s"
         #experiments = (1,2,4)
