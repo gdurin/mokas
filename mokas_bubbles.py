@@ -58,7 +58,7 @@ class Bubbles(StackImages):
 
         StackImages.__init__(self, **imParameters)
 
-
+    @property
     def switches(self): 
         return np.unique(self._switchTimes2D)[1:]
            
@@ -75,7 +75,8 @@ class Bubbles(StackImages):
         except:
             print("Run getEventsAndClusters first!")
 
-        clrs = np.random.rand(2*len(self.switches()),3)
+        n_colors = 2*(self.switches[-1] - self.switches[0] + 1)
+        clrs = np.random.rand(n_colors,3)
         clrs[0] = [0,0,0]
         cmap = mpl.colors.ListedColormap(clrs)
         
