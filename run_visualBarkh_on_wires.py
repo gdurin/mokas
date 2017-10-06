@@ -178,7 +178,8 @@ if __name__ == "__main__":
         # example
         # run run_visualBarkh_on_wires IEF_old 20um 0.145 2
         width, set_current, n_wire = sys.argv[2:]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
+        print(rootDir)
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
@@ -199,6 +200,7 @@ if __name__ == "__main__":
         # run run_visualBarkh_on_wires IEF_new 20um 0.14 2
         width, set_current, n_wire = sys.argv[2:]
         rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
+        print(rootDir)
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
