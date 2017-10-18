@@ -119,28 +119,51 @@ class RootHdf5:
                 print("No %s data available, please check" % obj)
                 return None
 
+    def load_dict(self, label, key_type=np.int):
+        """
+        load a dictionary written as groups
+        under the 'label' group
+        Parameters:
+            label : str
+                group where the dict is saved
+            key_type : number type
+                transform the key into a number, if possible
+        """
+        d = {}
+        with h5py.File(self.fname, 'r') as f:
+            grp0 = f[self.baseGroup][label]
+            for group in grp0: #yes, it looks like a dictionary
+                if key_type:
+                    key = key_type(group)
+                else:
+                    key = group
+                d[key] = grp0[group][...]
+        return d
+
     def save_data(self, datas, labels, dtype):
         """
         Save the data passed as a list of data and labels
         """
-        if not isinstance(datas, list):
-            datas = [datas]
-            labels = [labels]
-        with h5py.File(self.fname, 'a') as f:
-            grp0 = f[self.baseGroup]
-            for data, label in zip(datas, labels):
-                if not label in grp0:
-                    dset = grp0.create_dataset(label, data=data, dtype=dtype)
-                else:                    
-                    grp0[label][...] = data
-            f.flush()
+        if isinstance(datas,dict):
+            self.save_dict(datas, labels, dtype)
+        else:
+            if not isinstance(datas, list):
+                datas = [datas]
+                labels = [labels]
+            with h5py.File(self.fname, 'a') as f:
+                grp0 = f[self.baseGroup]
+                for data, label in zip(datas, labels):
+                    if not label in grp0:
+                        dset = grp0.create_dataset(label, data=data, dtype=dtype)
+                    else:                    
+                        grp0[label][...] = data
+                f.flush()
         return True
 
     def save_raw_images(self, images, imageNumbers, dtype=np.int16):
         """
         Save the images as numpy 3D arrays
         with the imageNumbers array
-        and the signautre of the 
         """
         datas = [images, imageNumbers]
         labels = ['images', 'imageNumbers']
@@ -151,6 +174,38 @@ class RootHdf5:
     def save_cluster2D(self, cluster2D, dtype=np.int16):
         success = self.save_data(cluster2D, 'cluster2D', dtype=dtype)       
         return success
+
+    def save_dict(self, dic, label, dtype):
+        """
+        recursively save the content of a dict to group
+        https://codereview.stackexchange.com/questions/120802/recursively-save-python-dictionaries-to-hdf5-files-using-h5py
+        """
+        with h5py.File(self.fname, 'a') as f:
+            grp0 = f[self.baseGroup]
+            if label in grp0:
+                grp0 = grp0[label]
+            else:
+                grp0 = grp0.create_group(label)
+            self._recursively_save_dict_contents_to_group(grp0, dic, dtype)
+            
+    def _recursively_save_dict_contents_to_group(self, path, dic, dtype):
+        """
+        there is a potential problem here:
+        it the keys of a dictonary is a number (int, float)
+        it has to be transformed into a str to create the group
+        """
+        for key, item in dic.items():
+            # Force to be a string
+            key = str(key)
+            if isinstance(item, (np.ndarray, np.int64, np.float64, str, bytes)):
+                if not key in path:
+                    dset = path.create_dataset(key, data=item, dtype=dtype)
+                else:                    
+                    path[key][...] = item
+            elif isinstance(item, dict):
+                self._recursively_save_dict_contents_to_group(path[key], item)
+            else:   
+                raise ValueError('Cannot save %s type'%type(item))
 
 
     def to_signature_hdf5(self, signature_np):

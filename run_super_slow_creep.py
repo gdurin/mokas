@@ -112,8 +112,7 @@ class RunBubbles:
             hist_labels = ['N_hist', 'bins_hist']
             bubble.hdf5.save_data(hist, hist_labels, dtype=np.float32)
             # Save contours
-            for switch in bubble.switches:
-                bubble.hdf5.save_data(bubble.contours[switch], 'contours/%i' %switch, dtype=np.float32)
+            bubble.hdf5.save_data(bubble.contours, 'contours', dtype=np.float32)
             
 
 
