@@ -5,8 +5,10 @@ import getLogDistributions as gLD
 import matplotlib.pyplot as plt
 import itertools
 import scipy.spatial as spatial
+import scipy.ndimage as nd
 from skimage.morphology import remove_small_holes
 from skimage.draw import line_aa
+import matplotlib.pyplot as plt
 
 class Domains:
     """
@@ -26,14 +28,27 @@ class Domains:
                 = self._is_single_domain(self.switched_domain, self.NNstructure)
         self.max_switch = self.max_switch_not_touching_edges()
 
-    def _is_single_domain(self, domain, NNstructure):
+    def _is_single_domain(self, domain, NNstructure, 
+                            is_remove_small_holes=True):
+        # remove small holes
+        if is_remove_small_holes:
+            domain = remove_small_holes(domain)
         im, n_cluster = mahotas.label(domain, NNstructure)
         if n_cluster > 1:
             print("There are %d clusters" % n_cluster)
-            return False, im, n_cluster
+            is_single_domain = False
         else:
-            print("It is a single domain")
-            return True, im, 1
+            # Check first if the domain is closed
+            # using the anti-domain
+            a_domain = remove_small_holes(~domain)
+            im0, n_cluster0 = mahotas.label(a_domain, NNstructure)
+            if n_cluster0 == 1:
+                print("The domain is not closed")
+                is_single_domain = False
+            elif n_cluster0 == 2:
+                print("It is a single domain")
+                is_single_domain = True
+        return is_single_domain, im, n_cluster
 
     def get_initial_domain(self, is_remove_small_holes=True):
         """
@@ -42,11 +57,29 @@ class Domains:
         1. a large domain with a few small clusters
         2. similar domains not connected
         """
-        if self.is_single_domain:
-            q = np.copy(self.switched_domain)
-        else:
-            n = self.n_initial_clusters + 1
-            im = np.copy(self.initial_clusters)
+        q = np.copy(self.switched_domain)
+        if is_remove_small_holes:
+            q = remove_small_holes(q)
+        if not self.is_single_domain:
+            if self.n_initial_clusters == 1:
+                # We need to split into two clusters to make it working
+                # 1. Look for the center of mass
+                row_c, col_c = [np.int(elem) for elem in nd.measurements.center_of_mass(self.switched_domain)]
+                rows, cols = self.switched_domain.shape
+                split_seq = [[0,row_c,0,cols], [row_c,rows,0,cols], [0,rows,0,col_c], [0,rows,col_c,cols]]
+                for seq in split_seq:
+                    r0,r1,c0,c1 = seq
+                    im = np.copy(self.switched_domain)
+                    im = remove_small_holes(im)
+                    im[r0:r1,c0:c1] = False
+                    im, n_cluster0 = mahotas.label(im, self.NNstructure)
+                    if n_cluster0 > 1:
+                        n = n_cluster0 + 1
+                        break
+            else:
+                # This works only if there are at least two clusters
+                n = self.n_initial_clusters + 1
+                im = np.copy(self.initial_clusters)
             for i, j in itertools.combinations(range(1, n), 2):
                 im_i = im == i
                 im_j = im == j
@@ -62,15 +95,20 @@ class Domains:
                 dist, indexes = mytree.query(indices_i)
                 imin = np.argmin(dist)
                 q_j = mytree.data[indexes[imin]]
-                print(q_i, q_j)
+                #print(q_i, q_j)
                 x_i, y_i = q_i.astype(int)
                 x_j, y_j = q_j.astype(int)
                 # Add a line between the two points
                 rr, cc, val = line_aa(x_i, y_i, x_j, y_j)
                 im[rr, cc] = 1
-            q = im > 0
-        if is_remove_small_holes:
-            q = remove_small_holes(q)
+                q[rr, cc] = True
+            #q = im > 0
+            fig = plt.figure()
+            ax = plt.gca()
+            ax.imshow(q)
+            plt.show()
+            
+
         im, n_cluster = mahotas.label(~q, self.NNstructure)
         im = mahotas.labeled.remove_bordering(im)
         if n_cluster > 1:
@@ -80,6 +118,11 @@ class Domains:
             index = size_clusters.argmax()
             #size_central_domain = size_clusters[index]
             im = im == index + 1
+        if True:
+            fig = plt.figure()
+            ax = plt.gca()
+            ax.imshow(im)
+            plt.show()
         return im
 
     def max_switch_not_touching_edges(self):

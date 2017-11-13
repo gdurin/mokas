@@ -141,9 +141,10 @@ if __name__ == "__main__":
         #print k
         #k = str(k).rjust(2,"0")
         current = "0.116"
-        rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
+        #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
         if not os.path.isdir(rootDir):
-            print("Check the path")
+            print("Check the path: %s") % rootDir
             sys.exit()
 
         subdir_pattern = "*_%s_%sA" % (irradiation,current)

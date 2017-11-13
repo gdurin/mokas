@@ -200,8 +200,15 @@ class RootHdf5:
             if isinstance(item, (np.ndarray, np.int64, np.float64, str, bytes)):
                 if not key in path:
                     dset = path.create_dataset(key, data=item, dtype=dtype)
-                else:                    
-                    path[key][...] = item
+                else:
+                    # Problems if the item exists and has a different shape
+                    # example:  TypeError: Can't broadcast (1269, 2) -> (7, 2)
+                    dset = path[key]
+                    try:
+                        dset[...] = item
+                    except TypeError:
+                        del path[key] # Note that del dset does not work as expected
+                        path.create_dataset(key, data=item, dtype=dtype)
             elif isinstance(item, dict):
                 self._recursively_save_dict_contents_to_group(path[key], item)
             else:   
@@ -235,16 +242,19 @@ if __name__ == "__main__":
     import scipy.misc
     #root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2"
     #pattern = "20um_0.145A_10fps_2_MMStack_Pos0.ome.tif"
-    root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/01_Irr_800uC_0.116A"
-    pattern = "01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
+    # root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/01_Irr_800uC_0.116A"
+    # pattern = "01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
     
-    signature = {'firstIm':0, 'lastIm':-1, 'crop':None, 
-                'rotation':None, 'filtering':'gauss', 'sigma':1, 'user':'Arianna', 'n_wire':'wire1'}
+    # signature = {'firstIm':0, 'lastIm':-1, 'crop':None, 
+    #             'rotation':None, 'filtering':'gauss', 'sigma':1, 'user':'Arianna', 'n_wire':'wire1'}
+    # rd = RootHdf5(root_dir, pattern, signature)
+    # # 
+    # image = scipy.misc.ascent()
+    # image = image[np.newaxis,...]
+    # images = np.vstack((image, image))
+    # imageNumbers = range(1,3,1)
+    # success = rd.save_raw_images(2*images, imageNumbers)
+    # success = rd.save_cluster2D(images)
+    # Load a dictionary
+    mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Irr_800uC.hdf5"
     rd = RootHdf5(root_dir, pattern, signature)
-    # 
-    image = scipy.misc.ascent()
-    image = image[np.newaxis,...]
-    images = np.vstack((image, image))
-    imageNumbers = range(1,3,1)
-    success = rd.save_raw_images(2*images, imageNumbers)
-    success = rd.save_cluster2D(images)

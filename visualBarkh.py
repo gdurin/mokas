@@ -1614,6 +1614,23 @@ class StackImages:
         self._switchTimes2D[clusters] = -1
         return central_domain
 
+    def _get_contours(self, domain, longest=False, 
+                    connectivity='high', threshold=0.5):
+        """
+        find the contour of a generic domain
+        Parameters:
+            domain: bool of the domain to find the contours of
+            longest: bool
+                if True, returns the longest, otherwise all
+            connectivity: high, low
+        """
+        cnts = measure.find_contours(domain, threshold, connectivity)
+        if not longest:
+            return cnts
+        else:
+            l = [len(cnt) for cnt in cnts]
+            i = np.argmax(l)
+            return cnts[i]
 
     def find_contours(self, lines_color=None, invert_y_axis=True, step_image=1,
                         consider_events_around_a_central_domain=True,
@@ -1652,7 +1669,8 @@ class StackImages:
         central_domain = self.domain.get_initial_domain(is_remove_small_holes=False)
         size_central_domain = np.sum(central_domain)
         yc, xc = nd.measurements.center_of_mass(central_domain)
-        cnts0 = measure.find_contours(central_domain, 0.5)[0]
+        #cnts0 = measure.find_contours(central_domain, 0.5, 'high')[0]
+        cnts0 = self._get_contours(central_domain, longest=True)
         self.contours[0] = cnts0
         self.bubbles[0] = central_domain
         self.centers_of_mass[0] = (yc, xc)
@@ -1726,7 +1744,8 @@ class StackImages:
                 ax.plot(x,y,'o',c=clr)
             #plt.plot(x,y,'o')
             try:
-                cnts = measure.find_contours(central_domain*1,.5)[0]
+                #cnts = measure.find_contours(central_domain*1,.5, 'high')[0]
+                cnts = self._get_contours(central_domain, longest=True)
             except:
                 self.im = im
                 print("There is a problem with the contour of image n. {}".format(switch))
