@@ -25,15 +25,19 @@ dir_logic['Arianna']['hdf5_dirs'] = ['width', 'H', 'fps', 'n_wire', 'n_exp']
 #################### Bubbles ###############################
 # Set the logic of the root_dir of the LAST n items
 # example:
-# /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/0.116A/01_Irr_800uC_0.116A
+# /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/0.116A/01_Irr_800uC_0.116A
 dir_logic['SuperSlowCreep'] = {}
-dir_logic['SuperSlowCreep']['from_root_dir'] = ['material', 'H', 'baseName']
-# baseDir = /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/
+dir_logic['SuperSlowCreep']['from_root_dir'] = ['year', 'H', 'baseName']
+# baseDir = /data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016
 # H = 0.116A
 # baseName = 01_Irr_800uC_0.116A
-dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'material'
+dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'year'
 # Give the logic for the full pattern using "_" as separator
+
+
 dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
+#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'H', 'MMS', 'Pos0']   #for NonIrr
+
 dir_logic['SuperSlowCreep']['hdf5_dirs'] = ['H', 'n_exp']
 # 01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif
 # H = 0.116A
@@ -62,7 +66,7 @@ class RootHdf5:
             key = in_root[i]
             dep_root, d[key] = os.path.split(dep_root)
         if verbose: print("root_dir:", root_dir)
-        baseName = d['material']
+        baseName = d['year']
         if verbose: print("baseName: %s" % baseName)
         baseDir = os.path.join(dep_root, baseName)
         # Get the elements from the patterm
@@ -86,11 +90,12 @@ class RootHdf5:
         self.baseGroup = os.path.join(*self.baseGroup)
         signature_hdf5 = self.to_signature_hdf5(signature)
         with h5py.File(self.fname, 'a') as f:
+            dt = h5py.special_dtype(vlen=str)
             if self.baseGroup not in f:
                 grp0 = f.create_group(self.baseGroup)
                 print("Group %s created" % self.baseGroup)
                 for key, item in signature_hdf5.iteritems():
-                    grp0.attrs.create(key, item)
+                    grp0.attrs.create(key, item, dtype=dt)
             else:
                 grp0 = f[self.baseGroup]
                 print("Group %s exists" % self.baseGroup)
@@ -256,5 +261,5 @@ if __name__ == "__main__":
     # success = rd.save_raw_images(2*images, imageNumbers)
     # success = rd.save_cluster2D(images)
     # Load a dictionary
-    mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Irr_800uC.hdf5"
+    mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/Irr_800uC.hdf5"
     rd = RootHdf5(root_dir, pattern, signature)

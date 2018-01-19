@@ -100,7 +100,8 @@ class RunBubbles:
             fig.suptitle(suptitle, fontsize=30)
         plt.show()  
 
-    
+
+
     def save_hdf5(self):
         for experiment in self.imArray_collector:
             bubble = self.imArray_collector[experiment]
@@ -113,7 +114,11 @@ class RunBubbles:
             bubble.hdf5.save_data(hist, hist_labels, dtype=np.float32)
             # Save contours
             bubble.hdf5.save_data(bubble.contours, 'contours', dtype=np.float32)
-            
+            # Save waiting time histogram
+            try:
+                bubble.hdf5.save_data(bubble.waiting_times_hist, 'waiting_time', dtype=np.int)
+            except:
+                pass
 
 
 
@@ -124,6 +129,8 @@ class RunBubbles:
         out_string = "_".join([str(e) for e in self.experiments])
         filename = os.path.join(res_dir, "events_and_clusters_exp%s.png" % out_string)
         self.fig3.savefig(filename)
+
+
 
 
 
@@ -140,18 +147,20 @@ if __name__ == "__main__":
         #k = sys.argv[2]
         #print k
         #k = str(k).rjust(2,"0")
-        current = "0.116"
-        #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
+        current = "0.232"
+        rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
+
         if not os.path.isdir(rootDir):
             print("Check the path: %s") % rootDir
             sys.exit()
 
         subdir_pattern = "*_%s_%sA" % (irradiation,current)
         filename_suffix = "_MMStack_Pos0.ome.tif"
-
         bubbles = RunBubbles(rootDir, subdir_pattern, erase_small_events_percent=None)
         bubbles.plot_results()
+        for experiment in bubbles.imArray_collector:
+            bubble = bubbles.imArray_collector[experiment]
+            bubble.waiting_times_map(is_plot=False)
         bubbles.save_hdf5()
         #bubbles.save_figs()
 
@@ -191,5 +200,4 @@ if __name__ == "__main__":
         #'center_of_mass')
         #save_data = raw_input("Save the data?")
 
-        #imArray.pickle_switchMap2D(mainDir=rootDir)
-      
+        #imArray.pickle_switchMap2D(mainDir=rootDir)    

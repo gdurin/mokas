@@ -24,8 +24,7 @@ class Domains:
         self.sw = sw[sw != no_switch_value]
         self.switch2D = switch2D
         self.switched_domain = switch2D >= self.sw[0]
-        self.is_single_domain, self.initial_clusters, self.n_initial_clusters \
-                = self._is_single_domain(self.switched_domain, self.NNstructure)
+        self.is_single_domain, self.initial_clusters, self.n_initial_clusters = self._is_single_domain(self.switched_domain, self.NNstructure)
         self.max_switch = self.max_switch_not_touching_edges()
 
     def _is_single_domain(self, domain, NNstructure, 
@@ -34,6 +33,7 @@ class Domains:
         if is_remove_small_holes:
             domain = remove_small_holes(domain)
         im, n_cluster = mahotas.label(domain, NNstructure)
+       
         if n_cluster > 1:
             print("There are %d clusters" % n_cluster)
             is_single_domain = False
@@ -45,7 +45,7 @@ class Domains:
             if n_cluster0 == 1:
                 print("The domain is not closed")
                 is_single_domain = False
-            elif n_cluster0 == 2:
+            elif n_cluster0 >= 2:
                 print("It is a single domain")
                 is_single_domain = True
         return is_single_domain, im, n_cluster
@@ -61,7 +61,7 @@ class Domains:
         if is_remove_small_holes:
             q = remove_small_holes(q)
         if not self.is_single_domain:
-            if self.n_initial_clusters == 1:
+            if self.n_initial_clusters >= 1:
                 # We need to split into two clusters to make it working
                 # 1. Look for the center of mass
                 row_c, col_c = [np.int(elem) for elem in nd.measurements.center_of_mass(self.switched_domain)]
@@ -78,7 +78,7 @@ class Domains:
                         break
             else:
                 # This works only if there are at least two clusters
-                n = self.n_initial_clusters + 1
+                n = self.n_initial_clusters + 1 
                 im = np.copy(self.initial_clusters)
             for i, j in itertools.combinations(range(1, n), 2):
                 im_i = im == i
