@@ -86,11 +86,12 @@ class RootHdf5:
         self.baseGroup = os.path.join(*self.baseGroup)
         signature_hdf5 = self.to_signature_hdf5(signature)
         with h5py.File(self.fname, 'a') as f:
+            dt = h5py.special_dtype(vlen=str)
             if self.baseGroup not in f:
                 grp0 = f.create_group(self.baseGroup)
                 print("Group %s created" % self.baseGroup)
                 for key, item in signature_hdf5.iteritems():
-                    grp0.attrs.create(key, item)
+                    grp0.attrs.create(key, item, dtype=dt)
             else:
                 grp0 = f[self.baseGroup]
                 print("Group %s exists" % self.baseGroup)

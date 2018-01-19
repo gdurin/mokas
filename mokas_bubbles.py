@@ -43,6 +43,17 @@ class Bubbles_ini(object):
 
         analysis = self.config['analysis']
         self.thresholds = [float(n) for n in analysis['thresholds'].split(",")]
+        erase = analysis['erase_small_events_percent']
+        if erase.lower() == 'none' or erase.lower() == 'false':
+            self.imParameters['erase_small_events_percent'] = None
+        else:
+            self.imParameters['erase_small_events_percent'] = float(erase)
+        exclude = analysis['exclude_switches_out_of_final_domain']
+        if exclude.lower() == 'none' or exclude.lower() == 'false':
+            self.imParameters['exclude_switches_out_of_final_domain'] = False
+        else:
+            self.imParameters['exclude_switches_out_of_final_domain'] = True
+
 
 
 

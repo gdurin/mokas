@@ -12,13 +12,17 @@ from mokas_colors import get_colors
 
 
 class RunBubbles:
-    def __init__(self, rootDir, subdir_pattern, erase_small_events_percent=None):
+    def __init__(self, rootDir, subdir_pattern):
         self.rootDir = rootDir
         # Get the initial parameters
         bubbles_ini = mkb.Bubbles_ini(rootDir)
         self.imParameters = bubbles_ini.imParameters
         self.experiments = bubbles_ini.experiments
         self.thresholds = bubbles_ini.thresholds
+        try:
+            erase_small_events_percent = bubbles_ini.erase_small_events_percent
+        except:
+            erase_small_events_percent = None
         self.erase_small_events_percent = erase_small_events_percent
 
         # Get the directories based on the pattern
@@ -80,7 +84,6 @@ class RunBubbles:
             self.imArray_collector[experiment] = imArray
             imArray.showColorImage(self.thresholds[n], palette= 'random', #pColor, 
                                     plot_contours=True, plotHist=None, 
-                                    erase_small_events_percent=self.erase_small_events_percent, 
                                     fig=self.fig1, ax=self.axs1[0, n], 
                                     title=title, noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
@@ -150,7 +153,7 @@ if __name__ == "__main__":
         subdir_pattern = "*_%s_%sA" % (irradiation,current)
         filename_suffix = "_MMStack_Pos0.ome.tif"
 
-        bubbles = RunBubbles(rootDir, subdir_pattern, erase_small_events_percent=None)
+        bubbles = RunBubbles(rootDir, subdir_pattern)
         bubbles.plot_results()
         bubbles.save_hdf5()
         #bubbles.save_figs()
