@@ -359,7 +359,7 @@ class Images:
     def collector(self):
         # Upload the images
         self.from_type()
-        if self.mode != 'pattern' and self.mode != 'avi':          
+        if self.mode not in ['pattern', 'avi', 'tif']:          
             if self.firstIm != 0 or self.lastIm != -1:
                 self.images = self.images[self.firstIm : self.lastIm + 1]
                 self.imageNumbers = self.imageNumbers[self.firstIm : self.lastIm + 1]

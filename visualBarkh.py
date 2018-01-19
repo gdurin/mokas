@@ -27,6 +27,7 @@ from mokas_domains import Domains
 import cPickle as pickle
 from skimage import measure
 
+SPACE = "###"
 
 # Check if pycuda is available
 try:
@@ -139,7 +140,8 @@ class StackImages:
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
                  exclude_switches_from_central_domain=True,
-                 exclude_switches_out_of_final_domain=True,
+                 exclude_switches_out_of_final_domain=False,
+                 erase_small_events_percent = None,
                  rotation=None, fillValue=-1, 
                  hdf5_use=False, 
                  hdf5_signature=None):
@@ -182,8 +184,9 @@ class StackImages:
             self.boundary = None
         if not lastIm:
             lastIm = -1
-        #self.exclude_switches_from_central_domain = exclude_switches_from_central_domain
+        # Variables for image analysis
         self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
+        self.erase_small_events_percent = erase_small_events_percent
 
         # Check paths
         if not os.path.isdir(self._mainDir):
@@ -648,6 +651,7 @@ class StackImages:
         self._switchTimes2D_original = np.copy(self._switchTimes2D)
         # Now check if getting rid of the wrong switches
         if self.exclude_switches_out_of_final_domain:
+            print("%s Exclude switches out of final domain" % SPACE)
             q = self._switchTimes2D != self.fillValue
             clusters, n_cluster = mahotas.label(q, self.NNstructure)
             sizes = mahotas.labeled.labeled_size(clusters)
@@ -656,8 +660,9 @@ class StackImages:
             # Get the largest final domain only
             final_domain = mahotas.labeled.remove_regions(clusters, too_small).astype('bool')
             self._switchTimes2D[~final_domain] = self.fillValue
-        if erase_small_events_percent:
-            percentage = erase_small_events_percent/100.
+        if self.erase_small_events_percent:
+            print("%s erase_small_events_percent" % SPACE)
+            percentage = self.erase_small_events_percent/100.
             # This gets rid of the wrong switchesf
             # Using the cluster max sizes for the switches
             # It redefines self._switchTimes2D

@@ -1,0 +1,281 @@
+import sys, os
+import numpy as np
+import getLogDistributions as gLD
+import matplotlib.pyplot as plt
+import pylab
+from collections import OrderedDict, defaultdict
+import h5py
+import getAxyLabels as gal
+import pandas as pd
+from skimage import measure
+import mokas_cluster_methods as mcm
+import mahotas
+import mokas_parser as mkp
+import ast
+
+
+class Clusters:
+
+    def __init__(self, mainDir, group, n_experiments, irradiation, min_size=5, skip_first_clusters=0):
+        """
+        it is important to set a min_size of the cluster. 
+        The value of 10 seems reasonable, but can be larger
+        """
+        hdf5_filename = os.path.join(mainDir,"{0}.hdf5".format(irradiation))
+        #print(hdf5_filename)
+        if not os.path.isfile(hdf5_filename):
+            print(hdf5_filename)
+            print("Check the path")
+            sys.exit()
+        self._fname = hdf5_filename
+        self.min_size = min_size
+        self.skip_first_clusters = skip_first_clusters
+        self.root_dir = os.path.join(mainDir, group)
+        p, filename = os.path.split(hdf5_filename)
+        filename, ext = os.path.splitext(filename)
+        self.n_experiments = n_experiments
+        self._len_experiments = len(n_experiments)
+        self.title = filename + " - " + " - ".join(group.split("/")) + " - %i exps." % self._len_experiments
+        self._baseGroup = group
+        self.cluster2D_start = OrderedDict()
+        self.cluster2D_end = OrderedDict()
+        self.times = OrderedDict()
+        with h5py.File(self._fname, 'a') as f:
+            grp_base = f[self._baseGroup]
+            saved_experiments = len(grp_base)
+            if len(n_experiments) > saved_experiments:
+                print("There are only %i/%i experiments" % (saved_experiments, self._len_experiments))
+                self.n_experiments = self.n_experiments[:saved_experiments]
+            for n_exp in self.n_experiments:
+                grp0 = self._baseGroup + "/%02i" % n_exp
+                grp_n_exp = f[grp0]
+                if "cluster2D_start" in grp_n_exp:
+                    self.cluster2D_start[n_exp] = grp_n_exp['cluster2D_start'][...]
+                    self.cluster2D_end[n_exp] = grp_n_exp['cluster2D_end'][...]
+                else:
+                    print("Cluster2D does not exist for exp: %i" % n_exp)
+                # Check if times exist
+                if 'times' in grp_n_exp:
+                    times = grp_n_exp['times'][...]
+                else:
+                    times = self._get_times(grp_n_exp)
+                    grp_n_exp.create_dataset("times", data=times, dtype=np.float16)
+                self.times[n_exp] = times
+                # read data of measure
+                if 'mu_per_pixel' in grp_base.attrs.keys():
+                    self.mu_per_pixel = grp_base.attrs['mu_per_pixel']
+                else:
+                    sub_dir = grp_n_exp.attrs['root_dir']
+                    if sub_dir[-1] == '/':
+                        sub_dir, _ = os.path.split(sub_dir[:-1])
+                    else:
+                        sub_dir, _ = os.path.split(sub_dir)
+                    fname_measure = os.path.join(sub_dir, "measure.txt")
+                    #print(fname_measure)
+                    p = mkp.Parser(fname_measure)
+                    data = p.get_data()
+                    self.um_per_pixel = data['um_per_pixel']
+                    grp_base.attrs.create('um_per_pixel', self.um_per_pixel)
+        
+        self.cluster_data = OrderedDict()
+
+
+    def _get_times(self, grp):
+        root_dir = grp.attrs['root_dir']
+        pattern = grp.attrs['pattern']
+        pattern = pattern.replace(".ome.tif", "_metadata.txt")
+        fname = os.path.join(root_dir, pattern)
+        with open(fname, 'r') as f: 
+            q = f.read()
+        q = q.replace("null", "False")
+        q = q.replace("false", "False")
+        d = ast.literal_eval(q)
+        times = np.array([float(d[k]["ElapsedTime-ms"]) for k in d if k!='Summary'])
+        times.sort()
+        times = (times - times[0]) / 1000.
+        return times
+        
+
+    def get_cluster_stats(self):
+    # Use these fake clusters to test things    
+    # cluster2D_start = np.array([[-1, -1, -1,  -1,  -1,  -1],
+    #   [-1, -1, -1,  -1,  -1,  -1],
+    #   [ -1,  -1,  4,  4,  -1, -1],
+    #   [-1, -1, 4,  4, -1, -1],
+    #   [-1, -1, -1,  -1,  -1,  -1],
+    #   [-1, -1, -1,  -1,  -1,  -1]], dtype=np.int32)
+
+    # cluster2D_end = np.array([[-1, -1, -1,  -1,  -1,  -1],
+    #   [-1, -1, -1,  -1,  -1,  -1],
+    #   [ -1,  -1,  6,  6,  -1, -1],
+    #   [-1, -1, 6,  6, -1, -1],
+    #   [-1, -1, -1,  -1,  -1,  -1],
+    #   [-1, -1, -1,  -1,  -1,  -1]], dtype=np.int32)
+
+        print("Get the statistics of the clusters for each experiment")
+        self.cluster_data = dict()
+        ######################################
+        for n_exp in self.cluster2D_start:
+            print("Experiment: %i" % n_exp)
+            cluster_data = defaultdict(list)
+            ############################################
+            cluster2D_start = self.cluster2D_start[n_exp]
+            cluster2D_end = self.cluster2D_end[n_exp]
+            cluster_switches = np.unique(cluster2D_start)[self.skip_first_clusters+1:] # the -1 are not considered!
+            # To test simply write:
+            # cluster_switches = np.unique(cluster2D_start)[1:]
+            
+            # This is also to test:             
+            # areas = np.array([])
+            # durations = np.array([])
+            # durations_n0 = np.array([])
+
+            for switch in cluster_switches:
+                q = cluster2D_start == switch
+                clusters, n_cluster = mahotas.label(q, np.ones((3,3)))
+                for i in range(1, n_cluster+1):
+                    cluster = clusters == i
+                    # Get the area of each cluster
+                    area = mahotas.labeled.labeled_size(cluster)[1:]
+                    if area < self.min_size:
+                        continue
+                    # Get the duration of each cluster
+                    duration = np.array([np.max(np.extract(clusters == i, cluster2D_end) - switch)])
+                    # Some clusters have duration 0. Get rid of those
+                    # duration_n0 = [dur for dur in duration if dur > 0]
+                    # Problem! This gives me some empty spaces in the final dataframe and I cannot plot those!
+                    # So I set to 0.1 those elements that are 0
+                    duration_n0 = np.array(duration, dtype=np.float) 
+                    duration_n0[duration_n0 == 0] = 0.1  
+                    # To test:
+                    # areas = np.concatenate((areas, area))
+                    # durations = np.concatenate((durations, duration))
+                    # durations_n0 = np.concatenate((durations_n0, duration_n0))
+                    # assert len(areas) == len(durations)
+                    cluster_contour = measure.find_contours(cluster, 0.5)  # need 0.5 because cluste is boolean
+                    time_start = switch
+                    time_end = np.max(np.extract(clusters == i, cluster2D_end))
+
+
+               
+                    # Save the data
+                    cluster_data['n_exp'].append(n_exp)
+                    cluster_data['switch_frame'].append(switch)
+                    cluster_data['switch_time'].append(self.times[n_exp][switch])
+                    cluster_data['cluster_area'].append(area)  
+                    cluster_data['cluster_duration'].append(duration)     
+                    cluster_data['cluster_duration_n0'].append(duration_n0)                
+            
+            cluster_cols = ['n_exp', 'switch_frame', 'switch_time', 'cluster_area', 'cluster_duration', 'cluster_duration_n0']
+            df = pd.DataFrame.from_dict(cluster_data)
+            self.cluster_data[n_exp] = df[cluster_cols]
+            #del df
+        self.all_clusters = pd.concat([self.cluster_data[cl] for cl in self.cluster_data])
+        return df
+
+
+    def plot_cluster_stats(self, log_step=0.1):
+        q = self.all_clusters
+                
+        # Plot the distribution of the cluster area
+        fig, ax = plt.subplots(1,1)
+        x,y,yerr = gLD.logDistribution(q.cluster_area, log_step=log_step)
+        plt.loglog(x,y, 'bo')
+        ax.set_xlabel("$S_{Clust}$", size=20)
+        ax.set_ylabel("$P(S_{Clust})$", size=20)
+        ax.set_title("Ta(5 nm)/CoFeB(1 nm)/MgO(2 nm) - IrrID = 16 X 10$^{16}$ He/m$^{2}$ \n Cluster area distribution")
+        ax.grid(True)
+
+        # Plot the distribution of the cluster duration (with the zeros replaced by 0.1)
+        fig, ax = plt.subplots(1,1)
+        x,y,yerr = gLD.logDistribution(q.cluster_duration_n0, log_step=log_step)
+        plt.loglog(x,y, 'bo')
+        pylab.xlim([0.5,100]) # Set the limits for the x-axis to avoid the wrong point at 0.1
+        ax.set_xlabel("$\Delta t_{Clust}$", size=20)
+        ax.set_ylabel("$P(\Delta t_{Clust})$", size=20)
+        ax.set_title("Ta(5 nm)/CoFeB(1 nm)/MgO(2 nm) - IrrID = 16 X 10$^{16}$ He/m$^{2}$ \n Cluster duration distribution")
+        ax.grid(True)
+
+        # Plot average cluster duration (the one with the zeros) vs cluster area
+        unique_cluster_area = np.unique(q.cluster_area)
+        average_cluster_duration = []
+        for area in unique_cluster_area:
+            # Note the use of.values to extract the values of the array from the df!!
+            duration = np.mean(np.extract(q.cluster_area.values == area, q.cluster_duration), dtype=np.float)
+            average_cluster_duration.append(duration)
+
+        average_cluster_duration = np.array(average_cluster_duration)
+
+        fig, ax = plt.subplots(1,1)
+        plt.plot(unique_cluster_area, average_cluster_duration, 'bo')
+        ax.set_xlabel("$S_{Clust}$", size=20)
+        ax.set_ylabel("$\Delta t_{Clust} - ave$", size=20)
+        ax.set_title("Ta(5 nm)/CoFeB(1 nm)/MgO(2 nm) - IrrID = 16 X 10$^{16}$ He/m$^{2}$ \n Average_cluster_duration vs cluster_area")
+
+        plt.show()
+        #return q
+
+def plot_cluster_stats_all_area(clusters, log_step=0.1):
+    fig, ax = plt.subplots(1,1)
+    for label in clusters:
+        q = clusters[label].all_clusters
+        
+        # Plot the distribution of the cluster area
+        x,y,yerr = gLD.logDistribution(q.cluster_area, log_step=log_step)
+        plt.loglog(x,y, 'o', label=label)
+    ax.set_xlabel("$S_{Clust}$", size=20)
+    ax.set_ylabel("$P(S_{Clust})$", size=20)
+    ax.set_title("Ta(5 nm)/CoFeB(1 nm)/MgO(2 nm) - IrrID = 16 X 10$^{16}$ He/m$^{2}$ \n Cluster area distribution")
+    ax.legend()
+    ax.grid(True)
+    plt.show()
+
+        
+if __name__ == "__main__":
+    plt.close("all")
+    imParameters = {}
+    n_experiments = {}
+    clusters = {}
+    choice = sys.argv[1]
+    try:
+        irradiation = sys.argv[1]
+    except:
+        irradiation = 'Irr_800uC'
+    
+    if irradiation == 'Irr_800uC_Dec16':
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/"
+        currents = ["0.116", "0.232"]
+        #currents = ["0.232"]
+        ns_experiments = {"0.116": [2,3,4,5,8,9,10], "0.232":range(1,11)}
+        #ns_experiments = {"0.232": range(1,11)}
+        #ns_experiments = {"0.116": [2,3,4,5,8,9,10]}
+        min_size = 5
+        irradiation = irradiation[:-6]
+
+    elif irradiation == 'Irr_800uC_Dec17':
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2017/"
+        #currents = ["0.22", "0.31"]
+        currents = ["0.22"]
+        ns_experiments = {"0.22": [1,2,3,4,6,10,11,12,13,14,15,16,17,18], "0.232":range(1,11)}
+        min_size = 5
+        irradiation = irradiation[:-6]
+
+    elif irradiation == 'Irr_400uC_Dec16':
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_400uC/Dec2016/"
+        currents = ["0.06", "0.1","0.2"]
+        #currents = ["0.22"]
+        ns_experiments = {"0.06": [1,2,3], "0.1":range(1,11), "0.2":range(1,11)}
+        min_size = 5
+        irradiation = irradiation[:-6]
+
+    for current in currents:    
+        grp0  = "%sA" % (current)
+        print("Analysing %s" % grp0)
+        n_experiments = ns_experiments[current]
+        clusters[current] = Clusters(mainDir, grp0, n_experiments, irradiation, skip_first_clusters=0, min_size=min_size)
+        # df = clusters.get_cluster_stats()
+        clusters[current].get_cluster_stats()
+        # q = clusters.plot_cluster_stats()
+        clusters[current].plot_cluster_stats()
+
+    plot_cluster_stats_all_area(clusters, log_step=0.1)
