@@ -51,6 +51,7 @@ class Creep:
 			self.all_contours = {}
 			self.all_centers = {}
 			print("Done.")
+			print(self.imParameters)
 	
 	def check_dirs(self):	
 		# Need to check now that all the files exist:
@@ -120,7 +121,7 @@ class Creep:
 			
 			imArray = StackImages(**self.imParameters)
 			self.imArray_collector[Bx] = imArray
-			imArray.width='all'
+			imArray.width = 'all'
 			imArray.useKernel = 'step'
 			imArray.kernelSign = -1
 
@@ -132,8 +133,8 @@ class Creep:
 
 			i, j = np.int(np.floor(n/cols)), n%cols
 			# Figure 1 : color Image of DW motion
-			imArray.showColorImage(self.gray_threshold,palette=pColor,
-				plotHist=None,plot_contours=False,fig=self.fig1,ax=self.axs1[i,j],title=title,noSwitchColor='black')
+			imArray.showColorImage(self.gray_threshold, palette=pColor, plotHist=None, 
+				plot_contours=False, fig=self.fig1, ax=self.axs1[i,j], title=title, noSwitchColor='black')
 			
 			# Figure 2 : plot the histogram
 			imArray.plotHistogram(imArray._switchTimesOverThreshold,fig=self.fig2,ax=self.axs2[i,j],title=title,ylabel=None)

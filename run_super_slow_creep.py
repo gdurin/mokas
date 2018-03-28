@@ -150,8 +150,10 @@ if __name__ == "__main__":
         #k = sys.argv[2]
         #print k
         #k = str(k).rjust(2,"0")
+        #current = "0.116"
         current = "0.232"
-        rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
+        #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
 
         if not os.path.isdir(rootDir):
             print("Check the path: %s") % rootDir
@@ -166,7 +168,7 @@ if __name__ == "__main__":
         for experiment in bubbles.imArray_collector:
             bubble = bubbles.imArray_collector[experiment]
             bubble.waiting_times_map(is_plot=False)
-        bubbles.save_hdf5()
+        #bubbles.save_hdf5()
         #bubbles.save_figs()
 
         

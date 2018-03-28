@@ -134,8 +134,6 @@ class Domains:
             q = remove_small_holes(q)
         print("There are %i initial clusters" % self.n_initial_clusters)        
         if not self.is_single_domain:
-
-
             if self.n_initial_clusters == 2:
                 # First calculate the bridge and make a single domain
                 # then find the other bridge
@@ -143,7 +141,6 @@ class Domains:
                     q = self._iterate_over_clusters(q, i)
             else:
                 q = self._iterate_over_clusters(q, self.n_initial_clusters)
-
         # Removal of the border in this case requires 
         # the use of a hor/ver NNstructure, 
         # otherwise it does not work

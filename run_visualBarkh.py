@@ -145,7 +145,7 @@ if __name__ == "__main__":
         elif k == 1:
             rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-350pOe-0.780V-4.3s_11"
             print(rootDir)
-            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['imCrop'] = [(0,0), (510, 672)]
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 21
@@ -154,9 +154,32 @@ if __name__ == "__main__":
             imParameters['sigma'] = 2.0
             threshold = 40
         #rootDir = "/home/gf/Meas/Creep/PtCoAu/PtCoAu_2c-0d-500pOe-1.275V-1.0s"
+        elif k == 20:
+            #rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-650nOe-0.780V-1.3s_29/"
+            rootDir = "/data/Meas/Creep/WCoFeB/W-CoFeB-MgO_NonIrr/movies/15_12A"
+            imParameters['imCrop'] = [(0,0),(1040,1392)]
+            imParameters['imCrop'] = [(650,420),(980,650)]
+            imParameters['pattern'] = "15_12A_MMStack_Pos0.ome.tif"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 26
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 2.
+            threshold = 20
+        elif k == 21:
+            rootDir = "/home/gf/Meas/Creep/PtCoAu50Pt50/Rotation/0 degree/PtCoAuPt_3_2c-00d2-650nOe-0.780V-1.3s_29/"
+            imParameters['imCrop'] = [(0,0),(554,672)]
+            imParameters['imCrop'] = [(270,90),(550,410)]
+            imParameters['pattern'] = "filename*.png"
+            imParameters['firstIm'] = 1
+            imParameters['lastIm'] = 12
+            imParameters['filtering'] = 'gauss'
+            #imParameters['filtering'] = None
+            imParameters['sigma'] = 1.5
+            threshold = 20
         elif k == 22:
             rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-000nOe-0.657V-40.0s_1"
-            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['imCrop'] = [(0,0), (510, 672)]
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 144
@@ -166,7 +189,7 @@ if __name__ == "__main__":
             threshold = 25
         elif k == 23:
             rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-100nOe-0.657V-30.0s_18"
-            imParameters['imCrop'] = (0,510,0,672)
+            imParameters['imCrop'] = [(0,0), (510, 672)]
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 89
@@ -176,7 +199,8 @@ if __name__ == "__main__":
             threshold = 25
         elif k == 24:
             rootDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-100pOe-0.657V-30.0s_19"
-            imParameters['imCrop'] = (0,510,0,672)
+            #imParameters['imCrop'] = (0,510,0,672)
+            imParameters['imCrop'] = [(0,0), (510, 672)]
             imParameters['pattern'] = "filename*.png"
             imParameters['firstIm'] = 1
             imParameters['lastIm'] = 88
@@ -344,7 +368,6 @@ if __name__ == "__main__":
             imParameters['subtract'] = None # Subtract a reference image
             imParameters['use_max_criterium'] = False
             threshold = 20
-
         else:
             print("Check the path!")
             sys.exit()
@@ -355,13 +378,15 @@ if __name__ == "__main__":
         #imParameters['imCrop'] = (0,510,0,672)
         # Kernel setups
         imParameters['kernel_half_width_of_ones'] = 15
+        imParameters['kernel_half_width_of_ones'] = 5
         #imParameters['kernel_internal_points'] = 0
         #imParameters['kernel_switch_position'] = "end"
         ##############################
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         imArray = bk.StackImages(**imParameters)
-        palette = 'coolwarm'
-        imArray.showColorImage(threshold, palette=palette, plot_contours=True)
+        #palette = 'coolwarm'
+        palette = 'random'
+        imArray.showColorImage(threshold, palette=palette, plot_contours=False)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
         #'center_of_mass')

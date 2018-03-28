@@ -4,7 +4,7 @@
 import numpy as np
 import matplotlib.colors as mpl_colors
 from matplotlib import cm
-from colorsys import hsv_to_rgb
+from colorsys import hsv_to_rgb, hls_to_rgb
 
 # Load ral colors
 # See http://www.ralcolor.com/
@@ -69,7 +69,7 @@ def get_colors(num_colors, palette='hue', norm=False):
             hue = i/360.
             lightness = (50 + np.random.rand() * 10)/100.
             saturation = (90 + np.random.rand() * 10)/100.
-            col = colorsys.hls_to_rgb(hue, lightness, saturation)
+            col = hls_to_rgb(hue, lightness, saturation)
             c = [int(col[0]*255),int(col[1]*255),int(col[2]*255)]
             colors.append(c)
         colors = np.random.permutation(colors)
@@ -102,7 +102,7 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
     if type(palette) is not type('str'):
         return palette
 
-    white = np.array([255,255,255])
+    white = np.array([255,255,255]) 
     if koreanPalette is None:
         # Prepare the Korean Palette
         koreanPalette = np.array([getKoreanColors(i, n) 
