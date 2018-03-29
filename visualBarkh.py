@@ -1822,6 +1822,39 @@ class StackImages:
         return
 
 
+    # def waiting_times_map(self, is_plot=True, log_norm=True):
+    #     """
+    #     calculate and plot the waiting time matrix
+    #     """
+    #     from matplotlib.colors import LogNorm
+    #     if not self.is_find_contours:
+    #         print("You have to run find_contours first")
+    #     x_points = np.array([])
+    #     y_points = np.array([])
+    #     # Collect the x and y of the contours
+    #     for k in self.contours:
+    #         cnt = self.contours[k]
+    #         x, y = cnt[:,0], cnt[:,1]
+    #         x_points = np.append(x, x_points)
+    #         y_points = np.append(y, y_points)
+    #     n_images, rows, cols = self.shape
+    #     bins = (np.arange(0,rows,.5), np.arange(0,cols,.5))
+    #     waiting_times_hist, xedges, yedges = np.histogram2d(x_points, y_points, bins=bins)
+    #     wt_masked = np.ma.masked_where(waiting_times_hist==0, waiting_times_hist)
+    #     if is_plot:
+    #         if log_norm:
+    #             norm = LogNorm()
+    #         else:
+    #             norm = 'None'
+    #         fig1 = plt.figure()
+    #         plt.imshow(waiting_times_hist,extent=[yedges[-1], yedges[0], xedges[0], xedges[-1]], 
+    #             norm=norm, interpolation='nearest')
+    #         fig2 = plt.figure()
+    #         plt.imshow(wt_masked,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
+    #             norm=norm, interpolation='nearest')
+    #     self.waiting_times_hist = waiting_times_hist
+    #     return
+
     def waiting_times_map(self, is_plot=True, log_norm=True):
         """
         calculate and plot the waiting time matrix
@@ -1840,6 +1873,19 @@ class StackImages:
         n_images, rows, cols = self.shape
         bins = (np.arange(0,rows,.5), np.arange(0,cols,.5))
         waiting_times_hist, xedges, yedges = np.histogram2d(x_points, y_points, bins=bins)
+        # this waiting_times_hist is not correct because it counts how many times a pixel is found in the contours
+        # but the contours considered here are only those that are different from each other!
+        # some contours may stay still for a few frames and this is not considered here!
+
+        sw_ini = np.empty(waiting_times_hist.shape) # empty matrix of the same shape as waiting_times_hist
+
+        switches = np.unique(self._switchTimes2D)[:] # the switches for which we have a contour
+        for sw in switches[::-1]: # looping on the reversed array
+            sw_ini 
+
+
+
+
         wt_masked = np.ma.masked_where(waiting_times_hist==0, waiting_times_hist)
         if is_plot:
             if log_norm:
