@@ -175,7 +175,6 @@ class StackImages:
         self.is_minmax_switches = False
         self.pattern = pattern
         self.fillValue = fillValue
-        #self.NNstructure = np.asanyarray([[0,1,0],[1,1,1],[0,1,0]])
         NN = 3
         self.NNstructure = np.ones((NN,NN))
         if boundary == 'periodic':
@@ -687,7 +686,6 @@ class StackImages:
             self._switchTimesUnique = np.unique(self._switchTimes2D)[1:] + self.min_switch
         else:
             self._switchTimesUnique = np.unique(self._switchTimes2D) + self.min_switch
-
         return
 
 

@@ -155,7 +155,12 @@ if __name__ == "__main__":
         current = "0.192"
         #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
         #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/Set1" % (irradiation,current)
+	#rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
+        #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
         rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/No_set" % (irradiation,current)
+
+        
+
         if not os.path.isdir(rootDir):
             print("Check the path: %s") % rootDir
             sys.exit()
@@ -171,8 +176,8 @@ if __name__ == "__main__":
         for experiment in bubbles.imArray_collector:
             bubble = bubbles.imArray_collector[experiment]
             bubble.waiting_times_map(is_plot=False)
+
         bubbles.save_hdf5()
-        
         #bubbles.save_figs()
 
         

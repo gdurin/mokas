@@ -26,6 +26,8 @@ def from_string(s, s_type='float'):
 		out_s = out_s.strip("[]").split(",")
 	if s_type == 'list_of_float':
 		out_s = [np.float(element) for element in out_s]
+	if s_type == 'list_of_tuple':
+		out_s = eval(out_s)
 	if s_type == 'tuple':
 		out_s = out_s.strip("()")
 		out_s = tuple([int(c) for c in out_s.split(",")])
@@ -51,6 +53,9 @@ def to_string(s):
 def to_tuple(s):
 	return from_string(s,'tuple')
 
+def to_list_of_tuple(s):
+	return from_string(s,'list_of_tuple')
+
 class IniConnector:
 	def __init__(self, filepath, Bz):
 		self.config = configparser.ConfigParser()
@@ -74,6 +79,7 @@ class IniConnector:
 		 	self.imageParameters['resize_factor'] = to_float(self.default['resize_factor'])
 		self.imageParameters['filtering'] = to_string(self.default['filtering'])
 		self.imageParameters['sigma'] = to_float(self.default['sigma'])
+		self.imageParameters['kernel_half_width_of_ones'] = to_int(self.default['kernel_half_width_of_ones'])
 
 		# Read the available OoP and InPlane fields
 		self.Bz_s_labels = to_list_of_string(self.default['Bz_s'])
@@ -97,7 +103,7 @@ class IniConnector:
 
 		# step in the frames to show a contours line in bold
 		# Assumed fixed for each Bz
-		crop = to_tuple(self.config[self.Bz_label]['imCrop'])
+		crop = to_list_of_tuple(self.config[self.Bz_label]['imCrop'])
 		self.imageParameters['imCrop'] = crop
 		self.step_in_frames = to_int(self.config[self.Bz_label]['step_in_frames'])
 		self.varsBx = {}

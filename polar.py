@@ -112,7 +112,8 @@ def plot_mean_velocity(x,v_mean,v_err,fig=None,ax=None,title=None,label=None,col
 
 def plot_displacement(contours,origin,reference='nucleated_domain',
 					n_new_thetas=720,swope_xy=True,
-					fig=None,ax=None,title=None,step_in_frames=10):
+					fig=None,ax=None,title=None,step_in_frames=10,
+					is_colors=False):
 	"""
 	Plot dispacements at different angles
 
@@ -131,12 +132,16 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 		swope x-y axis
 	"""
 	if fig is None:
-		fig, ax = plt.subplots(2,1,sharex=True)
+		fig, ax = plt.subplots(1,1,sharex=True)
 	switches = sorted(contours.keys())
 
 	syb = '-'
 	if reference == 'differential':
 		syb = 'o'
+	if is_colors:
+		lb = syb
+	else:
+		lb = 'k'+syb
 	new_thetas = np.linspace(-np.pi,np.pi,n_new_thetas)
 	for switch in switches:
 		r, theta = cart2polar(contours[switch],origin,swope_xy=swope_xy)
@@ -147,11 +152,11 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 			if switch == 0:
 				r0 = new_r
 			delta_r = new_r-r0
-			ax.plot(to_degree(new_thetas), delta_r, 'k'+syb,lw=lw)
+			ax.plot(to_degree(new_thetas), delta_r, lb, lw=lw)
 			if reference == 'differential':
 				r0 = new_r
 		else:
-			ax.plot(to_degree(theta), r, 'k'+syb,lw=lw)
+			ax.plot(to_degree(theta), r, lb,lw=lw)
 
 
 	ax.grid(True)
