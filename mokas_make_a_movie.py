@@ -53,6 +53,7 @@ class loadHdf5:
         p2 -= distance * self.edge_trim_percent / 100
         return p1, p2
 
+
 fname5 = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/Ta_CoFeB_MgO_wires_IEF_old.hdf5"
 outDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_3/Images"
 baseGroup = "/20um/0.145A/10fps/wire1/3"
