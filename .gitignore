@@ -1,0 +1,13 @@
+*.pyc
+*.py~
+backup/
+contours/
+videos.py
+*.pkl
+*.ipynb
+*.txt
+mokas_env/
+test.*
+*.dat
+*.png
+
