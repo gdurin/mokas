@@ -35,7 +35,7 @@ dir_logic['SuperSlowCreep']['from_root_dir'] = ['year', 'H', 'baseName']
 dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'year'
 # Give the logic for the full pattern using "_" as separator
 
-#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
+#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']   #for Irr_ ...
 dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'H', 'MMS', 'Pos0']   #for NonIrr
 
 dir_logic['SuperSlowCreep']['hdf5_dirs'] = ['H', 'n_exp']
