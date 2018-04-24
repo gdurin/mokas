@@ -62,15 +62,15 @@ def logDistribution(listValues, log_step=0.2, first_point=None,
     if not last_point:
         last_point = scipy.amax(listValues)
     X, Xbins = getLogBins(first_point, last_point, log_step)
-    Y = scipy.stats.stats.histogram2(listValues, Xbins)
-    deltas = Xbins[1:]-Xbins[:-1]        # Check if zeros occurs
+    Y, bin_edges = np.histogram(listValues, Xbins, density=False)
+    deltas = Xbins[1:]-Xbins[:-1]
+    # Check if zeros occurs
     bool0 = Y!=0
-    for ary in [X,Y,deltas]:
-        ary = scipy.compress(bool0, ary)      
-    Y = Y[:-1]/deltas
+    X, Y, deltas = X[bool0], Y[bool0], deltas[bool0]
+    Y = Y/deltas
     Yerr = (Y * (1. - Y/sum(Y)))**0.5 / (deltas*sum(Y))
     if normed:
-        Y = Y/scipy.sum(Y)
+      Y = Y/scipy.sum(Y)
     return X, Y, Yerr
     
 def averageLogDistribution(values, log_step=0.2, density=False,
@@ -445,8 +445,6 @@ if __name__ == "__main__":
        [    1,     1],
        [    2,     1]])
 
-    
-    
     import random
     import matplotlib.pylab as plt
     imageSize = 500**2

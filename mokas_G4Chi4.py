@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+from __future__ import print_function
 import sys, os
 import pickle, shutil
 import re, string, time
@@ -96,6 +96,7 @@ class Bubble_properties():
 
     @property
     def events(self):
+        pass
 
     def _fit_center(self, x, y):
         center_estimate = np.mean(x),np.mean(y)
@@ -149,7 +150,7 @@ class Bubble_properties():
         str1 = "%5.3f percent of bubble (at t=%d) radius\n\n" % (100*dmax/self.dws[tmax]['radius'], tmax)
         sys.stderr.write("%s, or %s" % (str0, str1))
 
-class CalcG4chi4_df():
+class CalcG4chi4():
     """
     Calculus of the G4 and chi4 values using a dataframe
     df has the rows given by the angles of the points
@@ -171,7 +172,7 @@ class CalcG4chi4_df():
         # h = (h(0,t_2) - R_t)/R_t^(1/3)
         h = self.dh/self.mean_radius**(1/3.)
 
-    def _calc_S_q(self, ref_i=(3,40), slope=2.33):
+    def _calc_S_q(self, ref_i=(3,40), zeta=2./3):
         """
         Calculation of the structure factor
         As a matter of fact it is a power spectrum in the q space
@@ -179,8 +180,9 @@ class CalcG4chi4_df():
         is calculate for a q which is in terms of angular distance
         The calculus for space (along the circle) has to be performed
         using first the data at theta which give different r
-        at different times, so we need to interpolate the 
+        at different times, so we need to interpolate the data
         """
+        slope = 1 + 2 * zeta
         N_thetas, N_times = self.h.shape
         d_theta = self.h.index[1] - self.h.index[0]
          # Calculate the q for the theta angles
@@ -201,40 +203,43 @@ class CalcG4chi4_df():
         S_q = np.mean(sq, axis=1)
         # Plot S(q_theta)
         fig, axs = plt.subplots(1,2)
-        axs[0].loglog(q_theta[1:], S_q_theta[1:], 'o')
+        axs[0].loglog(q_theta[1:], S_q_theta[1:], 'ko')
         # Plot the low q depinning exponent (-1)
         i0, i1 = ref_i
         fct = S_q_theta[i0]/q_theta[i0]**(-slope)
-        axs[0].loglog(q_theta, fct*q_theta**(-slope), 'g-', label='slope: %.2f' % slope)
-        fct = S_q_theta[i1]/q_theta[i1]**(-1.33)
-        t = q_theta[10:-10]
-        axs[0].loglog(t, fct*t**(-1.33), 'r--', label='slope: 1.33')
+        axs[0].loglog(q_theta, fct*q_theta**(-slope), 'r-', label='slope: %.2f' % slope)
+        # fct = S_q_theta[i1]/q_theta[i1]**(-1.33)
+        # t = q_theta[10:-10]
+        # axs[0].loglog(t, fct*t**(-1.33), 'r--', label='slope: 1.33')
         axs[0].legend(fontsize=12)
         axs[0].grid(True)
         axs[0].set_xlabel(r"$q_{\theta}$", size=20)
         axs[0].set_ylabel(r"$S(q_{\theta})$", size=20)
+        #
         # Plot S(q)
-        axs[1].loglog(q[1:], S_q[1:], 'o')
+        #
+        axs[1].loglog(q[1:], S_q[1:], 'ko')
         # Plot the low q depinning exponent (-1)
         fct = S_q[i0]/q[i0]**(-slope)
-        axs[1].loglog(q, fct*q**(-slope), 'g-', label='slope: %.2f' % slope)
-        fct = S_q[i1]/q[i1]**(-1.33)
-        t = q[10:-10]
-        axs[1].loglog(t, fct*t**(-1.33), 'r--', label='slope: 1.33')
+        axs[1].loglog(q, fct*q**(-slope), 'r-', label='slope: %.2f' % slope)
+        # fct = S_q[i1]/q[i1]**(-1.33)
+        # t = q[10:-10]
+        # axs[1].loglog(t, fct*t**(-1.33), 'r--', label='slope: 1.33')
         axs[1].legend(fontsize=12)
         axs[1].grid(True)
         axs[1].set_xlabel(r"$q$", size=20)
         axs[1].set_ylabel(r"$S(q)$", size=20)
+        sq = pd.Series(S_q, index=q)
+        return sq
 
-
-    def _calc_G4(self, theta_max=45, time_max=None, steps=(10,10)):
+    def _calc_G4(self, theta_max=45, time_max=None, theta_step=10, time_step=10):
         # Preliminar dataframes
         # calc df at a delta_theta
         # Ns = theta_N, time_N
         # Steps are in units of dtheta and dtime
         if time_max is None:
             time_max = self.times[-1]
-        theta_step, time_step = steps
+        #theta_step, time_step = steps
         dtheta = np.abs(self.thetas[1] - self.thetas[0])
         dtime = np.abs(self.times[1] - self.times[0])
         theta_max = int(theta_max/180. * np.pi / dtheta)
@@ -252,8 +257,8 @@ class CalcG4chi4_df():
         r_radius = self.mean_radius[-1] / self.mean_radius
         rows, cols = self.dh.shape
         for j, j_delta_time in enumerate(j_times):
-            if j%10:
-                print("Times: %i/%i" % (j, len(j_times))),
+            print("Times: %i/%i   " % (j, len(j_times)), end="\r")
+            sys.stdout.flush()
             dh_0_0 = self.dh.iloc[:, :-j_delta_time].values
             dh_0_t = self.dh.iloc[:, j_delta_time:].values
             # f1 is an np.array
@@ -286,7 +291,7 @@ class CalcG4chi4_df():
                 G4_r[i,j] = f13.mean() - (f1_mean * f3.mean())
                 C_r_t = (dh_r_t - dh_0_t)**2
                 C_r[i,j] = C_r_t.mean()**0.5
-
+        print("")
         # Out of the loop
         tm = np.diff(self.times).mean() * j_times
         tm = tm - tm[0]
@@ -352,233 +357,6 @@ class CalcG4chi4_df():
         #ax.text2D(0.05, 1.2, text2D, transform=ax.transAxes)
         plt.show()
 
-
-class CalcG4chi4():
-    """
-    Calculus of the G4 and chi4 values
-    """
-    def __init__(self, dws, r_elements=5, t_elements=7, 
-                drho_use_avgcircle=True):
-        """
-        dws is a dictionary of the dw properties
-        calculated with Bubble_properties Class
-        
-        The dws dictionary is defined for each switch,
-        i.e. the time at which the switch of the pixel occurs.
-        This is not, strictly speaking, the time at which the event occurs.
-        It has to be connected to the real time
-        """
-        self.r_elements = r_elements     # take relements different radius values
-        self.switches = np.array(sorted(dws.keys()))
-        if t_elements is None:
-            self.t_step = 1
-        else:
-            self.t_step = int(len(self.switches) / t_elements) # Needed for Python3
-        if self.t_step == 0:
-            self.t_step = 1
-        self.dws = dws
-        self.drho_use_avgcircle = drho_use_avgcircle
-        #ldw0 = dw0.shape[0]
-        #self.G4, self.chi4 = self._get_chi()
-
-    def _get_chi(self, r_min=1):
-        G4, chi4 = [], []  # easier with simple arrays
-        chi_prog = 0.
-        startingtime = self.switches[0]
-        dwt = self.dws[startingtime]
-        #print(dwt)
-        dw0, dist0, rad0 = dwt['dw'], dwt['dist'], dwt['radius']
-        ang0, distCenter0 = dwt['angle'], dwt['dist_from_center']
-        self.center = dwt['center']   # the center of the initial bubble
-        r_max = np.pi * rad0  # up to half a bubble
-        switches = self.switches[::self.t_step]
-        r_s = np.linspace(r_min, r_max, self.r_elements)
-        X_sw, Y_r = np.meshgrid(switches, r_s)
-        G4 = np.zeros_like(X_sw)
-        print(len(switches), len(r_s), X_sw.shape)
-        for i, switch in enumerate(switches):
-            dwt = self.dws[switch]
-            dw, dist, rad = dwt['dw'], dwt['dist'], dwt['radius'] 
-            ang, distCenter = dwt['angle'], dwt['dist_from_center']
-            x0, y0 = dwt['center']   # the center of the t=switch bubble
-            chi_prog = []
-            # loop on the radius
-            for j,r in enumerate(r_s):
-                outstr= "time [%d:%d:%d] r[%.4f:%.4f] \r" % (switch, self.switches[-1], self.t_step, r, r_max)
-                print(outstr)
-                count_r_all, four_delta, two_delta_0, two_delta_r = [], [], [], []
-                # ~~~ The main whole bubble avg loop ~~~ based on the bubbletime=startingtime bubble angle datapoints        
-                for i0, a in enumerate(ang0):                                          
-                    #xp, yp = dw0[i0] # the point at angle a of the initial bubble
-                    # Calculate the angulare difference: there is a problem at 2pi
-                    # which is solved using arctan2
-                    # ang_diff = np.absolute(ang - a) does not work close to 0,2pi
-                    ang_diff = ang - a
-                    ang_diff = np.absolute(np.arctan2(np.sin(ang_diff), np.cos(ang_diff)))
-                    # Find the index of the first point in the larger bubble
-                    it = np.argmin(ang_diff) # simplest way: use just the nearer point
-                    # Roll the array so i0 is the first point
-                    dw0_rolled, dist0_rolled, distCenter0_rolled = [np.roll(d, -i0) for d in [dw0, dist0, distCenter0]] 
-                    dw_rolled, dist_rolled, distCenter_rolled = [np.roll(d, -it) for d in [dw, dist, distCenter]] 
-                    # Calculate all distances from i0 and it
-                    dist0_from_i0, dist_from_it = [np.cumsum(d) for d in [dist0_rolled, dist_rolled]]
-                    # Select the points at distance <r from i0
-                    # On dw0
-                    select_i = dist0_from_i0 < r
-                    if not np.sum(select_i):
-                        continue
-                    i_at_r_on_0 = np.argmax(dist0_from_i0[select_i]) # The final point
-                    count_r = dist0_from_i0[i_at_r_on_0]
-                    r_avrg_0 = np.mean(distCenter0_rolled[select_i])
-                    count_r_all.append(count_r)
-                    # On dw
-                    select_i = dist_from_it < r
-                    if not np.sum(select_i):
-                        continue
-                    #count_r = np.sum(dist_rolled[select_i])
-                    r_avrg = np.mean(distCenter_rolled[select_i])
-                    i_at_r = np.argmax(dist_from_it[select_i])
-                    # Get the angle at distance r
-                    #ang0_rolled = np.roll(ang0, -i0)
-                    #a_r = ang0_rolled[select_i][-1]
-                    #da_r = np.absolute(a_r - a)
-                    if self.drho_use_avgcircle:
-                        drho00 = self._calc_dist(dw0[i0]) - rad0
-                        drho0t = self._calc_dist(dw[it]) - rad
-                        drhor0 = self._calc_dist(dw0_rolled[i_at_r_on_0]) - rad0
-                        drhort = self._calc_dist(dw_rolled[i_at_r]) - rad
-                    else:
-                        drho00 = self._calc_dist(dw0[i0]) - r_avrg_0
-                        drho0t = self._calc_dist(dw[it]) - r_avrg
-                        drhor0 = self._calc_dist(dw0_rolled[i_at_r_on_0]) - r_avrg_0
-                        drhort = self._calc_dist(dw_rolled[i_at_r]) - r_avrg
-                    four_delta.append(drho00 * drho0t * drhor0 * drhort)
-                    two_delta_0.append(drho00 * drho0t)
-                    two_delta_r.append(drhor0 * drhort)
-                # ~~~ Averaging on t=0 bubble points done ~~~ now calculate G4(r,t) value 
-                # about dist0: along the contours, each point's distance from the next is 1 or Sqrt[2]/2
-                #intvolume=dist0.sum() # the total length in pixels of the t=0 bubble - it is s bit lower than i0 (comment in N.B.c>)
-                # NO: num.average (else integration volume would be the total contour length instead)
-                avg_four_delta = np.mean(four_delta)
-                avg_two_delta_0 = np.mean(two_delta_0)
-                avg_two_delta_r = np.mean(two_delta_r)
-
-                # G4 given by multiplication of 4 distances [G4]=m^4
-                G_elem = avg_four_delta - avg_two_delta_0 * avg_two_delta_r
-                #avgangdistance = angdistance / ldw0   # comment in N.B.b>
-                avg_count_r = np.mean(count_r_all)
-                newrow = [avg_count_r, switch, G_elem]
-                #G4.append(newrow)
-                G4[j, i] = G_elem
-                Y_r[j, i] = avg_count_r
-                chi_prog.append(G_elem)   # avg on all the r values at bubbletime
-            #timeold = switch        
-            #chi_prog = chi_prog / float(self.r_elements)
-            chi4.append([switch, np.mean(chi_prog)])
-        return [X_sw, Y_r, G4], chi4
-
-
-
-    def _get_chi_G_angle(self, r_min=1):
-        """
-        calculus of chi and G4 
-        with constant angular distance
-        between the points
-        """
-        G4, chi4 = [], []  # easier with simple arrays
-        chi_prog = 0.
-        startingtime = self.switches[0]
-        dwt = self.dws[startingtime]
-        #print(dwt)
-        dw0, dist0, rad0 = dwt['dw'], dwt['dist'], dwt['radius']
-        ang0, distCenter0 = dwt['angle'], dwt['dist_from_center']
-        self.center = dwt['center']   # the center of the initial bubble
-        #r_max = np.pi * rad0  # up to half a bubble
-        # loop over time (or switches)
-        for switch in self.switches[::self.t_step]:
-            dwt = self.dws[switch]
-            dw, dist, rad = dwt['dw'], dwt['dist'], dwt['radius'] 
-            ang, distCenter = dwt['angle'], dwt['dist_from_center']
-            x0, y0 = dwt['center']   # the center of the t=switch bubble
-            chi_prog = []
-            # the loop here is done on the index of the ang0
-            # consider as a delta_i of the two angles
-            for i_delta_ang in np.range(1, len(ang0)/2):
-                outstr= "time [%d:%d:%d] delta_angle[%.4f:%.4f] \r" % (switch, self.switches[-1], self.t_step, r, r_max)
-                print(outstr)
-                count_r_all, four_delta, two_delta_0, two_delta_r = [], [], [], []
-                # ~~~ The main whole bubble avg loop ~~~ based on the bubbletime=startingtime bubble angle datapoints        
-                for i0_0, a in enumerate(ang0):                                          
-                    #xp, yp = dw0[i0] # the point at angle a of the initial bubble
-                    ang_diff = np.absolute(ang - a)
-                    # Find the index of the first point in the larger bubble
-                    i0_t = np.argmin(ang_diff) # simplest way: use just the nearer point
-                    # Roll the array so i0_0 is the first point
-                    dw0_rolled, dist0_rolled, distCenter0_rolled = [np.roll(d, -i0_0) for d in [dw0, dist0, distCenter0]] 
-                    dw_rolled, dist_rolled, distCenter_rolled = [np.roll(d, -i0_t) for d in [dw, dist, distCenter]] 
-                    
-                    # Now take the points at a i_delta_angle distance
-                    ang0_rolled = [np.roll(_a, -i0_0) for _a in [ang0]] 
-                    i1_0 = i0_0 + i_delta_angle
-                    
-                    # Calculate all distances from i0 and it
-                    dist0_from_i0, dist_from_it = [np.cumsum(d) for d in [dist0_rolled, dist_rolled]]
-                    # Select the points at distance <r from i0
-                    # On dw0
-                    select_i = dist0_from_i0 < r
-                    if not np.sum(select_i):
-                        continue
-                    i_at_r_on_0 = np.argmax(dist0_from_i0[select_i]) # The final point
-                    count_r = dist0_from_i0[i_at_r_on_0]
-                    r_avrg_0 = np.mean(distCenter0_rolled[select_i])
-                    count_r_all.append(count_r)
-                    # On dw
-                    select_i = dist_from_it < r
-                    if not np.sum(select_i):
-                        continue
-                    #count_r = np.sum(dist_rolled[select_i])
-                    r_avrg = np.mean(distCenter_rolled[select_i])
-                    i_at_r = np.argmax(dist_from_it[select_i])
-                    # Get the angle at distance r
-                    #ang0_rolled = np.roll(ang0, -i0)
-                    #a_r = ang0_rolled[select_i][-1]
-                    #da_r = np.absolute(a_r - a)
-                    if self.drho_use_avgcircle:
-                        drho00 = self._calc_dist(dw0[i0]) - rad0
-                        drho0t = self._calc_dist(dw[it]) - rad
-                        drhor0 = self._calc_dist(dw0_rolled[i_at_r_on_0]) - rad0
-                        drhort = self._calc_dist(dw_rolled[i_at_r]) - rad
-                    else:
-                        drho00 = self._calc_dist(dw0[i0]) - r_avrg_0
-                        drho0t = self._calc_dist(dw[it]) - r_avrg
-                        drhor0 = self._calc_dist(dw0_rolled[i_at_r_on_0]) - r_avrg_0
-                        drhort = self._calc_dist(dw_rolled[i_at_r]) - r_avrg
-                    four_delta.append(drho00 * drho0t * drhor0 * drhort)
-                    two_delta_0.append(drho00 * drho0t)
-                    two_delta_r.append(drhor0 * drhort)
-                # ~~~ Averaging on t=0 bubble points done ~~~ now calculate G4(r,t) value 
-                # about dist0: along the contours, each point's distance from the next is 1 or Sqrt[2]/2
-                #intvolume=dist0.sum() # the total length in pixels of the t=0 bubble - it is s bit lower than i0 (comment in N.B.c>)
-                # NO: num.average (else integration volume would be the total contour length instead)
-                avg_four_delta = np.mean(four_delta)
-                avg_two_delta_0 = np.mean(two_delta_0)
-                avg_two_delta_r = np.mean(two_delta_r)
-
-                # G4 given by multiplication of 4 distances [G4]=m^4
-                G_elem = avg_four_delta - avg_two_delta_0 * avg_two_delta_r
-                #avgangdistance = angdistance / ldw0   # comment in N.B.b>
-                avg_count_r = np.mean(count_r_all)
-                newrow = [avg_count_r, switch, G_elem]
-                G4.append(newrow)
-                chi_prog.append(G_elem)   # avg on all the r values at bubbletime
-            #timeold = switch        
-            #chi_prog = chi_prog / float(self.r_elements)
-            chi4.append([switch, np.mean(chi_prog)])
-        return G4, chi4
-
-    def _calc_dist(self, p):
-        xp, yp = p
-        return calc_R(self.center, xp, yp)
     
 #plt.close("all")
 if __name__ == "__main__":
@@ -626,21 +404,30 @@ if __name__ == "__main__":
         G4_theta, G4_r = c._calc_G4(theta_max=135, time_max=20., steps=(1,2))
     elif test == 'meas':
         # Irr_880uC
-        str_irr = "Irr_880uC"
-        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/"
-        hdf5_fname = "Dec2016.hdf5"
-        field, n_run = "0.116A", "05"
+        # str_irr = "Irr_880uC"
+        # mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/"
+        # hdf5_fname = "Dec2016.hdf5"
+        # field, n_run = "0.116A", "05"
+        # n_set = None
         #field, n_run = "0.232A", "05"
-
         #baseGroup = "0.116A/05" # This works
         #baseGroup = "0.116A/03"
+
         # not Irradiated
-        # str_irr = "NonIrr"
-        # mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Dec2016/"
-        # hdf5_fname = "NonIrr.hdf5"
-        # field, n_run = "0.095A", "02"
+        str_irr = "NonIrr"
+        #mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Dec2016/"
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/0.146A"
+        #hdf5_fname = "NonIrr.hdf5"
+        hdf5_fname = "0.146A.hdf5"
+        #field, n_run = "0.095A", "02"
+        n_set, field, n_run = "Set1", "0.146A", "02"
+        ###########################################
+        if n_set:
+            baseGroup = "%s/%s/%s" % (n_set, field, n_run)
+        else:
+            baseGroup = "%s/%s" % (field, n_run)
+
         fname = os.path.join(mainDir, hdf5_fname)
-        baseGroup = "%s/%s" % (field, n_run)
         contours = {}
         key_type = np.int
         with h5py.File(fname, 'a') as f:
@@ -687,10 +474,16 @@ if __name__ == "__main__":
         theta, r, frames = polar.plot_displacement(contours, (yc,xc),reference='center')
         plt.show()
         print("Max time: %d (s), N. time steps: %i" % (times[-1], len(times)))
-        c = CalcG4chi4_df(df)
+        c = CalcG4chi4(df)
         #G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, steps=(2,5))
-        G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, steps=(2,5))
-        #c._calc_interface_fluctuations()
-        c._calc_S_q()
+        G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, theta_step=5, time_step=10)
+        S_q = c._calc_S_q(ref_i=(6,40))
+        store = pd.HDFStore(fname)
+        store.put(baseGroup+"/S_q", S_q)
+        store.put(baseGroup+"/G4_theta", G4_theta)
+        store.put(baseGroup+"/G4_r", G4_r)
+        store.put(baseGroup+"/C_theta", C_theta)
+        store.put(baseGroup+"/C_r", C_r)
+        store.close()
     plt.show()
 

@@ -2,6 +2,7 @@ import os
 import numpy as np
 import h5py
 from collections import OrderedDict
+from pathlib import Path
 
 dir_logic = {}
 
@@ -34,60 +35,93 @@ dir_logic['SuperSlowCreep']['from_root_dir'] = ['year', 'H', 'baseName']
 dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'year'
 # Give the logic for the full pattern using "_" as separator
 
-
-dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
-#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'H', 'MMS', 'Pos0']   #for NonIrr
+#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
+dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'H', 'MMS', 'Pos0']   #for NonIrr
 
 dir_logic['SuperSlowCreep']['hdf5_dirs'] = ['H', 'n_exp']
+dir_logic['SuperSlowCreep']['hdf5_root_dir'] = 'year'
+dir_logic['SuperSlowCreep']['hdf5_baseName'] = 'year'
 # 01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif
 # H = 0.116A
 
+################ With Set #############################################
+dir_logic['SuperSlowCreep_withSet'] = {}
+dir_logic['SuperSlowCreep_withSet']['from_root_dir'] = ['year', 'H', 'set_n', 'baseName']
+# baseDir = '/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/0.137A/Set1/03_NonIrr_0.137A/'
+# H = 0.137A
+# set_n = Set1
+# baseName = Set1/03_NonIrr_0.137A
+# Give the logic for the full pattern using "_" as separator
 
-
-
+#dir_logic['SuperSlowCreep']['from_pattern'] = ['n_exp', 'mat1', 'mat2', 'H', 'MMS', 'Pos0']
+dir_logic['SuperSlowCreep_withSet']['from_pattern'] = ['n_exp', 'mat1', 'H', 'MMS', 'Pos0']   #for NonIrr
+dir_logic['SuperSlowCreep_withSet']['hdf5_dirs'] = ['set_n', 'H', 'n_exp']
+dir_logic['SuperSlowCreep_withSet']['hdf5_root_dir'] = 'H'
+dir_logic['SuperSlowCreep_withSet']['hdf5_baseName'] = 'H'
 
 class RootHdf5:
     """
     class to handle the main hdf5 in the root directory
     """
     def __init__(self, root_dir, pattern, signature, verbose=False):
+        params = {}
+        d = {}
+        if verbose:
+            print(50*"#")
+
         user = signature['user']
         # Load a logic for the dirs as defined above
         self._dl = dir_logic[user]
         # Calculate how many items has to be considered in the root_dir
         # reverse the direction of the lists
-        in_root = self._dl['from_root_dir'][::-1]
+        in_root = self._dl['from_root_dir']
         len_in_root = len(in_root)
-        dep_root = os.path.abspath(root_dir)
-        d = {}
-        if verbose: print(10*"#")
-        for i in range(len_in_root):
-            if verbose: print(dep_root)
-            key = in_root[i]
-            dep_root, d[key] = os.path.split(dep_root)
-        if verbose: print("root_dir:", root_dir)
-        baseName = d['year']
-        if verbose: print("baseName: %s" % baseName)
-        baseDir = os.path.join(dep_root, baseName)
+        pt = Path(root_dir).parts[-len_in_root:]
+        for key, item in zip(in_root, pt):
+            params[key] = item
         # Get the elements from the patterm
         # First the keys in the pattern (filename)
         in_pattern = self._dl['from_pattern']
-        dirs = {}
+        if verbose:
+            print("in_pattern: %s" % in_pattern)
         pt = pattern.split("_")
         for key, item in zip(in_pattern, pt):
-            if key in in_pattern:
-                dirs[key] = item
-        signature_hdf5 = self.to_signature_hdf5(signature)
-        if verbose: print(signature_hdf5)
-        dirs.update(signature_hdf5)
-        hdf5_filename = baseName + ".hdf5"
-        self.fname = os.path.join(baseDir, hdf5_filename)
-        is_hdf5 = os.path.isfile(self.fname)
+            if key not in params:
+                params[key] = item
         # Get the elements for the baseGroup
         self.baseGroup = []
         for key in self._dl['hdf5_dirs']:
-            self.baseGroup.append(dirs[key])
+            print(params[key])
+            self.baseGroup.append(params[key])
         self.baseGroup = os.path.join(*self.baseGroup)
+
+        _from_root_dir = self._dl['from_root_dir']
+        _len_from_root_dir = len(_from_root_dir)
+        _position = _from_root_dir.index(self._dl['hdf5_root_dir'])
+        k = _len_from_root_dir - 2 - _position
+        baseDir = Path(root_dir).parents[k]
+        baseDir = str(baseDir)
+        if verbose: 
+            print("baseDir: %s" % baseDir)
+
+        _position = _from_root_dir.index(self._dl['hdf5_baseName'])
+        k = _len_from_root_dir - _position
+        baseName = Path(root_dir).parts[-k]
+        hdf5_filename = str(baseName) + ".hdf5"
+        if verbose: 
+            print("hdf5_filename: %s" % hdf5_filename)
+
+        signature_hdf5 = self.to_signature_hdf5(signature)
+        if verbose: print(signature_hdf5)
+        #dirs.update(signature_hdf5)
+        
+        self.fname = os.path.join(baseDir, hdf5_filename)
+        is_hdf5 = os.path.isfile(self.fname)
+
+        if verbose:
+            print("baseGroup:")
+            print(self.baseGroup)
+        
         signature_hdf5 = self.to_signature_hdf5(signature)
         with h5py.File(self.fname, 'a') as f:
             dt = h5py.special_dtype(vlen=str)
@@ -245,13 +279,13 @@ class RootHdf5:
     
 if __name__ == "__main__":
     import scipy.misc
-    #root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2"
-    #pattern = "20um_0.145A_10fps_2_MMStack_Pos0.ome.tif"
+    root_dir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_IEF_old/20um/20um_0.145A/20um_0.145A_10fps_2"
+    pattern = "20um_0.145A_10fps_2_MMStack_Pos0.ome.tif"
     # root_dir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/01_Irr_800uC_0.116A"
     # pattern = "01_Irr_800uC_0.116A_MMStack_Pos0.ome.tif"
     
-    # signature = {'firstIm':0, 'lastIm':-1, 'crop':None, 
-    #             'rotation':None, 'filtering':'gauss', 'sigma':1, 'user':'Arianna', 'n_wire':'wire1'}
+    signature = {'firstIm':0, 'lastIm':-1, 'crop':None, 
+                'rotation':None, 'filtering':'gauss', 'sigma':1, 'user':'Arianna', 'n_wire':'wire1'}
     # rd = RootHdf5(root_dir, pattern, signature)
     # # 
     # image = scipy.misc.ascent()
@@ -261,5 +295,5 @@ if __name__ == "__main__":
     # success = rd.save_raw_images(2*images, imageNumbers)
     # success = rd.save_cluster2D(images)
     # Load a dictionary
-    mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/Irr_800uC.hdf5"
+    #root_dir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/Irr_800uC.hdf5"
     rd = RootHdf5(root_dir, pattern, signature)
