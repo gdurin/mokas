@@ -692,10 +692,10 @@ def plot_cluster_stats_all_area(clusters, log_step=0.1):
     plt.show()
 
 def plot_cluster_lengths(clusters, log_step=0.1, zeta=0.633, ms=6):
-    
-    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
     sizes = clusters.cluster_size
     major_axis_lengths = clusters.cluster_maj_ax_len
+    # Plot size vs. lengths
+    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
     ax.loglog(major_axis_lengths, sizes, 'o', ms=ms, label=r'$S$')
     ax.set_xlabel(r"Major axis length $L$", size=20)    
     ax.set_ylabel(r"Cluster size $S$", size=26)
@@ -709,8 +709,17 @@ def plot_cluster_lengths(clusters, log_step=0.1, zeta=0.633, ms=6):
     ax.loglog(l,s, 'ro', label=r'$\langle S \rangle$')
     lb = r'$\zeta$ = %.3f' % zeta
     ax.loglog(l[1:-8], s[5]*(l[1:-8]/l[5])**(1.+zeta), 'k--', label=lb)
-    
     ax.legend()
+    ax.grid(True)
+    ###############################################
+    # Plot distribution lengths
+    ll, pll, pll_err = gLD.logDistribution(major_axis_lengths, log_step=log_step)
+    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))    
+    ax.loglog(ll, pll, 'o', ms=ms, label=r'$S$')
+    ax.set_xlabel(r"Major axis length $L$", size=20)    
+    ax.set_ylabel(r"Length distribution $P(L)$", size=20)
+    ax.loglog(ll, pll[5]*(ll/ll[5])**(-1.5), 'k--')
+    #ax.legend()
     ax.grid(True)
     plt.show()
 
@@ -788,8 +797,8 @@ if __name__ == "__main__":
         irradiation = irradiation[:-6]
 
     elif irradiation == 'NonIrr_Dec18':
-        field = "0.137"
-        #field = "0.146"
+        #field = "0.137"
+        field = "0.146"
         #field = "0.157"
         #field = "0.165"
         set_n = "Set1"
@@ -870,7 +879,7 @@ if __name__ == "__main__":
                 fig=fig0, lb=lb+' filtered', color='m', max_index=None)
             
             cl.plot_cluster_maps(cl.cluster2D_start, cln, cln_filtered)
-            plot_cluster_lengths(ac)
+            plot_cluster_lengths(ac_filtered)
         start3 = datetime.datetime.now()
         diff = start3 - start2
         print_time(diff)
