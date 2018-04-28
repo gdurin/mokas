@@ -693,9 +693,9 @@ def plot_cluster_stats_all_area(clusters, log_step=0.1):
 
 def plot_cluster_lengths(clusters, log_step=0.1, zeta=0.633, ms=6):
     
-    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
     sizes = clusters.cluster_size
     major_axis_lengths = clusters.cluster_maj_ax_len
+    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
     ax.loglog(major_axis_lengths, sizes, 'o', ms=ms, label=r'$S$')
     ax.set_xlabel(r"Major axis length $L$", size=20)    
     ax.set_ylabel(r"Cluster size $S$", size=26)
@@ -709,9 +709,12 @@ def plot_cluster_lengths(clusters, log_step=0.1, zeta=0.633, ms=6):
     ax.loglog(l,s, 'ro', label=r'$\langle S \rangle$')
     lb = r'$\zeta$ = %.3f' % zeta
     ax.loglog(l[1:-8], s[5]*(l[1:-8]/l[5])**(1.+zeta), 'k--', label=lb)
-    
     ax.legend()
     ax.grid(True)
+    ##############
+    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
+    lengths,p_lengths,pl_err = gLD.logDistribution(major_axis_lengths, log_step=log_step)
+    ax.loglog(lengths, p_lengths, 'o', ms=ms)
     plt.show()
 
 def print_time(diff):

@@ -416,11 +416,11 @@ if __name__ == "__main__":
         # not Irradiated
         str_irr = "NonIrr"
         #mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Dec2016/"
-        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/0.146A"
+        n_set, field, n_run = "Set1", "0.146A", "08"
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/%s" % field
         #hdf5_fname = "NonIrr.hdf5"
-        hdf5_fname = "0.146A.hdf5"
+        hdf5_fname = "%s.hdf5" % field
         #field, n_run = "0.095A", "02"
-        n_set, field, n_run = "Set1", "0.146A", "02"
         ###########################################
         if n_set:
             baseGroup = "%s/%s/%s" % (n_set, field, n_run)
@@ -476,7 +476,7 @@ if __name__ == "__main__":
         print("Max time: %d (s), N. time steps: %i" % (times[-1], len(times)))
         c = CalcG4chi4(df)
         #G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, steps=(2,5))
-        G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, theta_step=5, time_step=10)
+        G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, theta_step=10, time_step=10)
         S_q = c._calc_S_q(ref_i=(6,40))
         store = pd.HDFStore(fname)
         store.put(baseGroup+"/S_q", S_q)
