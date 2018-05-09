@@ -145,6 +145,8 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
         noSwitchColorValue = 3*[255]
     elif noSwitchColor == 'gray':
         noSwitchColorValue = 3*[125]
+    elif noSwitchColor == 'lightgray':
+        noSwitchColorValue = 3*[220]
     else:
         print("No color, assuming black")
         noSwitchColorValue = 3*[0]

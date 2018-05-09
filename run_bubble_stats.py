@@ -1,6 +1,7 @@
 import sys, os
 import datetime
 import numpy as np
+from scipy import optimize
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import h5py
@@ -80,6 +81,8 @@ class Clusters:
                 last_switch = np.unique(self.switchTimes2D[n_exp])[-1]
                 grp_n_exp_contour = f[grp0 + "/contours/%i" % last_switch]
                 self.last_contour[n_exp] = grp_n_exp_contour[...]
+                grp_n_exp_contour = f[grp0 + "/contours/0"]
+                self.first_contour = grp_n_exp_contour[...]
                 # Check if times exist
                 if 'times' in grp_n_exp:
                     times = grp_n_exp['times'][...]
@@ -97,7 +100,31 @@ class Clusters:
                     data = p.get_data()
                     self.um_per_pixel = data['um_per_pixel']
                     grp_base.attrs.create('um_per_pixel', self.um_per_pixel)
-        
+    
+    def _f_2(self, c, x, y):
+        xc, yc = c
+        r_i = np.sqrt((x-xc)**2 + (y-yc)**2)
+        return r_i - r_i.mean() 
+
+    def _get_center(self, contour):
+        x, y = contour[:,1], contour[:,0]
+        center_estimate = np.mean(x), np.mean(y)
+        (xc_m,yc_m), ier = optimize.leastsq(self._f_2, center_estimate, args=(x,y))  # done by scipy
+        if not ier:
+            print("There is a problem to fit the center of the bubble")
+        return xc_m, yc_m
+
+    def _get_center_mahotas(self, image):
+        q = image > 0
+        _cls, n_cls = mahotas.label(~q)
+        sizes = mahotas.labeled.labeled_size(_cls)
+        idx = np.argmax(sizes[2:]) + 2
+        initial_domain = _cls == idx
+        center = mahotas.center_of_mass(initial_domain)
+        print("Center found at: {1:.2f}, {0:.2f}".format(*center))
+        return center
+
+
     def _get_times(self, grp):
         is_success = False
         root_dir = grp.attrs['root_dir']
@@ -133,6 +160,7 @@ class Clusters:
         t0 = 0.
         self.labeledEvents2D = {}
         event_label = 0L
+        self.max_label = []
         ######################################
         for j, n_exp in enumerate(self.n_experiments):
             print("Experiment: %i" % n_exp)
@@ -178,6 +206,7 @@ class Clusters:
                     event_data['event_label'].append(event_label)
                     le[event] = event_label
                     event_label += 1L
+            self.max_label.append(event_label)
             self.labeledEvents2D[n_exp] = le
 
             # How to shuffle the rows
@@ -203,6 +232,8 @@ class Clusters:
         self.cdf = self.get_cdf(self.all_events.event_size)
         self.p_large_size = self._get_prob_p()
         self._cluster2D_nij = self._sum_maps(self.labeledEvents2D)
+        self.center = self._get_center_mahotas(self._cluster2D_nij)
+        self.max_label = np.array(self.max_label)
         return 
 
     def _get_prob_p(self):
@@ -430,18 +461,26 @@ class Clusters:
         all_clusters = pd.DataFrame(_cluster_data, columns=cluster_cols)
         return all_clusters
 
-    def get_cluster_stats_from_nj2(self, image2D, _string=None):
+    def get_cluster_stats_from_nj2(self, image2D, center=None, _string=None):
         print(60*"*")
         print("Get the statistics of the clusters for each experiment %s" % _string)
-        cluster_cols = ['cluster_label', 'cluster_size', 'cluster_maj_ax_len', 'cluster_min_ax_len']
+        cluster_cols = ['n_exp','label', 'area', 'maj_ax_len', 'min_ax_len']
+        cluster_cols += ['solidity', 'centroid', 'dist_to_center']
         _cluster_data = defaultdict(list)
         ############################################
         self.regions = measure.regionprops(image2D)
         regions = [reg for reg in self.regions if reg.area >= self.min_size]
-        _cluster_data['cluster_label'] = [props.label for props in regions]
-        _cluster_data['cluster_size'] = [props.area for props in regions]
-        _cluster_data['cluster_maj_ax_len'] = [props.major_axis_length for props in regions]
-        _cluster_data['cluster_min_ax_len'] = [props.minor_axis_length for props in regions]
+        lb = [props.label for props in regions]
+        _cluster_data['label'] = lb
+        _cluster_data['n_exp'] = [np.argmax((self.max_label//l).astype(bool))+1 for l in lb]
+        _cluster_data['area'] = [props.area for props in regions]
+        _cluster_data['maj_ax_len'] = [props.major_axis_length for props in regions]
+        _cluster_data['min_ax_len'] = [props.minor_axis_length for props in regions]
+        _cluster_data['solidity'] = [props.solidity for props in regions]
+        centroids = [props.centroid for props in regions]
+        _cluster_data['centroid'] = centroids
+        xc, yc = self.center
+        _cluster_data['dist_to_center'] = [((c[0]-xc)**2+(c[1]-yc)**2)**0.5 for c in centroids]
         all_clusters = pd.DataFrame(_cluster_data, columns=cluster_cols)
         return all_clusters
 
@@ -676,6 +715,49 @@ class Clusters:
         plt.show()
 
 
+    def plot_cluster_lengths(self, clusters, min_solidity=0.7, log_step=0.1, zeta=0.633, ms=8):
+        sizes = clusters.area
+        major_axis_lengths = clusters.maj_ax_len
+        # Plot size vs. lengths
+        fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
+        ax.loglog(major_axis_lengths, sizes, 'o', ms=6, label=r'$S$')
+        ax.set_xlabel(r"Major axis length $L$", size=20)    
+        ax.set_ylabel(r"Cluster size $S$", size=26)
+        ######################
+        v = {}  
+        lns = np.unique(major_axis_lengths)
+        for l in lns:
+            w = major_axis_lengths == l
+            v[l] = sizes[w]
+        l, s = gLD.averageLogDistribution(v, log_step=log_step)
+        ax.loglog(l,s, 'ro', label=r'$\langle S \rangle$')
+        lb = r'$\zeta$ = %.3f' % zeta
+        ax.loglog(l[1:-8], s[5]*(l[1:-8]/l[5])**(1.+zeta), 'k--', ms=8, label=lb)
+        ax.legend()
+        ax.grid(True)
+        ###############################################
+        # Plot distribution lengths
+        fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))    
+        #for n_exp in self.n_experiments:
+        #    c = clusters[clusters.n_exp == n_exp]
+        #    major_axis_lengths = c.maj_ax_len
+        if min_solidity:
+            clusters = clusters[clusters.solidity >= min_solidity]
+        l_d =  clusters.maj_ax_len / clusters.dist_to_center
+        ll, pll, pll_err = gLD.logDistribution(l_d, log_step=log_step)
+        #ax.loglog(ll, pll, 'o', ms=ms, label='n_exp = %i' % n_exp)
+        #ax.set_xlabel(r"Major axis length $L$", size=20)    
+        ax.loglog(ll, pll, 'o', ms=ms)
+        ax.set_xlabel(r"Normalized major axis length $L$", size=20)    
+        ax.set_ylabel(r"Length distribution $P(L)$", size=20)
+        ax.loglog(ll, pll[8]*(ll/ll[8])**(-1.5), 'k--', label = "1.5 slope")
+        #ax.loglog(ll, pll[8]*(ll/ll[8])**(-1.5)*np.exp(-ll/.4), 'k--', label = "1.5 slope with exp")
+        ax.loglog(ll, .12*(ll/.028)**(-1.5) * np.exp(-(ll/.1)**1.5), lw=2)
+        ax.legend()
+        ax.grid(True)
+        plt.show()
+
+
 def plot_cluster_stats_all_area(clusters, log_step=0.1):
     fig, ax = plt.subplots(1,1)
     for label in clusters:
@@ -691,37 +773,6 @@ def plot_cluster_stats_all_area(clusters, log_step=0.1):
     ax.grid(True)
     plt.show()
 
-def plot_cluster_lengths(clusters, log_step=0.1, zeta=0.633, ms=6):
-    sizes = clusters.cluster_size
-    major_axis_lengths = clusters.cluster_maj_ax_len
-    # Plot size vs. lengths
-    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
-    ax.loglog(major_axis_lengths, sizes, 'o', ms=ms, label=r'$S$')
-    ax.set_xlabel(r"Major axis length $L$", size=20)    
-    ax.set_ylabel(r"Cluster size $S$", size=26)
-    ######################
-    v = {}  
-    lns = np.unique(major_axis_lengths)
-    for l in lns:
-        w = major_axis_lengths == l
-        v[l] = sizes[w]
-    l, s = gLD.averageLogDistribution(v, log_step=log_step)
-    ax.loglog(l,s, 'ro', label=r'$\langle S \rangle$')
-    lb = r'$\zeta$ = %.3f' % zeta
-    ax.loglog(l[1:-8], s[5]*(l[1:-8]/l[5])**(1.+zeta), 'k--', label=lb)
-    ax.legend()
-    ax.grid(True)
-    ###############################################
-    # Plot distribution lengths
-    ll, pll, pll_err = gLD.logDistribution(major_axis_lengths, log_step=log_step)
-    fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))    
-    ax.loglog(ll, pll, 'o', ms=ms, label=r'$S$')
-    ax.set_xlabel(r"Major axis length $L$", size=20)    
-    ax.set_ylabel(r"Length distribution $P(L)$", size=20)
-    ax.loglog(ll, pll[5]*(ll/ll[5])**(-1.5), 'k--')
-    #ax.legend()
-    ax.grid(True)
-    plt.show()
 
 def print_time(diff):
     sec = diff.seconds
@@ -797,44 +848,30 @@ if __name__ == "__main__":
         irradiation = irradiation[:-6]
 
     elif irradiation == 'NonIrr_Dec18':
-        #field = "0.137"
-        field = "0.146"
-        #field = "0.157"
-        #field = "0.165"
+        fields = ["0.137", "0.146", "0.157", "0.165"]
+        field = fields[1]
         set_n = "Set1"
         mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/%sA/" % field
         fieldDir = os.path.join(mainDir, set_n)
         hdf5_filename = "%sA.hdf5" % field
         hdf5_filename_results = "Results_NonIrr_Feb2018.hdf5"
-        currents = [field]
-        ns_experiments = {"0.137": range(2, 16), "0.146": range(1,9), "0.157": [2,3,4,5], "0.165": range(1,5)}
+        currents = fields[1:2]
+        ns_experiments = {"0.137": range(2, 16), "0.146": range(7,9), "0.157": [2,3,4,5], "0.165": range(1,5)}
+
 
         if field == "0.137":
-            #crop_upper_left_pixel = [(None,None), (300,300), (300,300), (300,300), (300,300), (200,200), (0,0)]
-            #crop_lower_right_pixel = [(None,None),(800,800), (800,800), (800,800), (900,900), (1040,1392)]
             nij_list, clrs = [0.44], ['r']
         elif field == "0.146":
-            #crop_upper_left_pixel = [(300,300),(200,200),(200,200),(200,200),(200,200),(100,100),(0,0),(0,0)]
-            #crop_lower_right_pixel = [(700,800),(800,900),(800,900),(800,900),(800,900),(900,1000),(1100,1000),(1100,1000)]
-            #nij_max = {"Set1": 0.32}
             nij_list, clrs = [0.33], ['r']           
         elif field == "0.157":
-            #crop_upper_left_pixel = [(300,300), (300,300), (200,200), (100,100), (0,0)]
-            #crop_lower_right_pixel = [(900,900), (900,900), (1000,1000), (1000,1000), (1040,1040)]
             nij_list, clrs = [0.25], ['r']
         elif field == "0.165":
-            #crop_upper_left_pixel = [(200,200),(200,200),(100,100),(0,0)]
-            #crop_lower_right_pixel = [(900,900),(900,900),(900,900),(1250,1040)]
             nij_list, clrs = [0.15], ['r']
         
-        # crops = {}
-        # for i in range(len(crop_lower_right_pixel)):
-        #     crops[i+1] = (crop_upper_left_pixel[i], crop_lower_right_pixel[i])
-                  
         min_size, hist_dx = 5, 0.01
 
 
-    for current in currents:    
+    for current in currents:  
         field  = "%sA" % (current)
         print("Analysing %s" % field)
         n_experiments = ns_experiments[current]
@@ -843,6 +880,7 @@ if __name__ == "__main__":
         cl = Clusters(mainDir, hdf5_filename, field, n_experiments, set_n=set_n,
             fieldDir=fieldDir, skip_first_clusters=0, min_size=min_size)
         clusters[current] = cl
+        #continue
         # Get the statistic of the events
         cl.get_event_stats()
         PS_events, fig0 = cl.plot_cluster_stats(cl.all_events.event_size.values, p0=None, lb='raw events', color='g')
@@ -852,9 +890,9 @@ if __name__ == "__main__":
         print_time(diff)
         #sys.exit()
         # Clusters as usual 
-        all_clusters = cl.get_cluster_stats_from_dict(cl.cluster2D_start, 'adiacent events')
-        PS_touch, fig0 = cl.plot_cluster_stats(all_clusters.cluster_size.values, 
-            fig=fig0, lb='from touching events', color='b')
+        #all_clusters = cl.get_cluster_stats_from_dict(cl.cluster2D_start, 'adiacent events')
+        #PS_touch, fig0 = cl.plot_cluster_stats(all_clusters.cluster_size.values, 
+        #    fig=fig0, lb='from touching events', color='b')
         start2 = datetime.datetime.now()
         diff = start2 - start1
         print_time(diff)
@@ -863,23 +901,23 @@ if __name__ == "__main__":
         all_clusters_nij = {}
         cluster2D_nij = {}
         ####################################
-        #for clr, nij_ax in zip(['r', 'm'],[0.33, 0.45]):
         for clr, nij_max in zip(clrs,nij_list):
             lb = 'from n_ij = %.2f' % nij_max
             title = r"clusters with $n_{ij} = %.2f$" % nij_max
             cln = cl.get_clusters_nij(cl.con_to_df, nij_max, title=title)
             cluster2D_nij[nij_max] = cln
-            ac = cl.get_cluster_stats_from_nj2(cln, 'events with nij: %.2f' % nij_max)
-            all_clusters_nij[nij_max] = ac
-            PS_nij, fig = cl.plot_cluster_stats(ac.cluster_size.values, fig=fig0, lb=lb, color=clr)
+            #ac = cl.get_cluster_stats_from_nj2(cln, 'events with nij: %.2f' % nij_max)
+            #all_clusters_nij[nij_max] = ac
+            #PS_nij, fig = cl.plot_cluster_stats(ac.area.values, fig=fig0, lb=lb, color=clr)
             #cl.plot_cluster_maps(cl.cluster2D_start, cln)
             cln_filtered = cl.clean_small_clusters(cln)
-            ac_filtered = cl.get_cluster_stats_from_nj2(cln_filtered, 'events with nij: %.2f, filtered' % nij_max)
-            PS_nij_filtered, fig = cl.plot_cluster_stats(ac_filtered.cluster_size.values, 
-                fig=fig0, lb=lb+' filtered', color='m', max_index=None)
+            ac_filtered = cl.get_cluster_stats_from_nj2(cln_filtered, 
+                                                'events with nij: %.2f, filtered' % nij_max)
+            PS_nij_filtered, fig = cl.plot_cluster_stats(ac_filtered.area.values, 
+                                    fig=fig0, lb=lb+' filtered', color='m', max_index=None)
             
             cl.plot_cluster_maps(cl.cluster2D_start, cln, cln_filtered)
-            plot_cluster_lengths(ac_filtered)
+            cl.plot_cluster_lengths(ac_filtered)
         start3 = datetime.datetime.now()
         diff = start3 - start2
         print_time(diff)

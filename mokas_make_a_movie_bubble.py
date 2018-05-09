@@ -6,23 +6,29 @@ import h5py
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from mokas_colors import getPalette
-
+from skimage import measure
 
 class loadHdf5:
-    def __init__(self, fname, baseGroup):
+    def __init__(self, fname, baseGroup, limits=None):
         self.fname = fname
         self.baseGroup = baseGroup
         self.edge_trim_percent = 8
+        if limits is not None:
+             self.limits = limits
+             self.is_limits = True
+
 
     def load_raw_images(self):
+        if self.is_limits:
+            r0,r1,c0,c1 = self.limits
         with h5py.File(self.fname, 'r') as f:
             grp0 = f[self.baseGroup]
             if 'images' in grp0:
-                images = grp0['images'][...]
+                if self.is_limits:
+                    images = grp0['images'][:,r0:r1+1,c0:c1+1]
+                else:
+                    images = grp0['images'][...]
                 imageNumbers = grp0['imageNumbers'][...]
-                row_profile = np.mean(images[0], 0)
-                #p1, p2 = self._get_edges(images[0])
-                #images = images[:, :, p1:p2+1]
             else:
                 print("No data available, please check")
                 images, imageNumbers = None, None
@@ -32,10 +38,15 @@ class loadHdf5:
         with h5py.File(self.fname, 'r') as f:
             grp0 = f[self.baseGroup]
             if 'cluster2D_end' in grp0:
-                cluster2D_end = grp0['cluster2D_end'][...]
-                #cluster2D_start = grp0['cluster2D_start'][...]
-                cluster2D_start = grp0['cluster2D_start'][...]
-                switchTimes2D = grp0['switchTimes2D'][...]
+                if self.is_limits:
+                    r0,r1,c0,c1 = self.limits
+                    cluster2D_end = grp0['cluster2D_end'][r0:r1+1,c0:c1+1]
+                    cluster2D_start = grp0['cluster2D_start'][r0:r1+1,c0:c1+1]
+                    switchTimes2D = grp0['switchTimes2D'][r0:r1+1,c0:c1+1]
+                else:
+                    cluster2D_end = grp0['cluster2D_end'][...]
+                    cluster2D_start = grp0['cluster2D_start'][...]
+                    switchTimes2D = grp0['switchTimes2D'][...]
                 return cluster2D_start, cluster2D_end, switchTimes2D
             else:
                 print("No data available, please check")
@@ -56,13 +67,22 @@ class loadHdf5:
         p2 -= distance * self.edge_trim_percent / 100
         return p1, p2
 
+
+
 mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/"
 current, set_n, n_exp = "0.146", "Set1", "03"
 fname5 = "{0}A/{0}A.hdf5".format(current)
 fname5 = os.path.join(mainDir, fname5)
 baseGroup = "/%s/%sA/%s" % (set_n, current, n_exp)
-outDir = "%s/Movies/%sA/%s/n_exp%s" % (mainDir, current, set_n, n_exp)
-hdf5 = loadHdf5(fname5, baseGroup)
+outDir = "Movies/%sA/%s/n_exp%s" % (current, set_n, n_exp)
+outDir = "Movies"
+outDir = os.path.join(mainDir, outDir)
+if not os.path.isdir(outDir):
+    os.mkdir(outDir)
+#limits = (140,220,180,530)
+limits = (180,260,180,530)
+r0, r1, c0, c1 = limits
+hdf5 = loadHdf5(fname5, baseGroup, limits)
 images, imageNumbers = hdf5.load_raw_images()
 cluster2D_start, cluster2D_end, switchTimes2D = hdf5.load_2D()
 # n=1.45
@@ -81,52 +101,42 @@ cluster2D_start, cluster2D_end, switchTimes2D = hdf5.load_2D()
 # q[im0] = white
 
 # is_in_cluster = False
-r0,r1,c0,c1 = (140,220,180,530)
-r0,r1,c0,c1 = (180,260,180,530)
-#fsize = (9.75,4.5)
-fsize = (8.14, 4.25)
-#fig, axs = plt.subplots(2, 1, sharex=True, sharey=True, figsize=fsize)
-fig, axs = plt.subplots(2, 1, figsize=fsize)
-axs[0].imshow(images[-1,r0:r1+1,c0:c1+1]-images[0,r0:r1+1,c0:c1+1],'gray')
+qq = cluster2D_start != -1
+contours = measure.find_contours(qq, .5, 'low')
+X, Y = contours[2][:,1], contours[2][:,0]
 
-n = np.unique(cluster2D_start)[-1]
+
+
+# fsize = (9.75,4.5)
+fsize = (8.14, 4.25)
+# fig, axs = plt.subplots(2, 1, sharex=True, sharey=True, figsize=fsize)
+switches_start = np.unique(cluster2D_start)[1:]
+switches = np.unique(switchTimes2D)[1:]
+n = switches[-1]
+#p = getPalette(n, 'random', 'lightgray')
 p = getPalette(n, 'random', 'black')
 cm = colors.ListedColormap(p, 'pColorMap')
+bounds = np.append(switches, switches[-1]+1)-0.5
+norm = colors.BoundaryNorm(bounds, len(bounds)-1)
 
-axs[1].imshow(cluster2D_start[r0:r1+1,c0:c1+1], cmap=cm)
-for ax in axs:
-    ax.axis((0,c1-c0,r1-r0,0))
-plt.tight_layout()
-plt.show()
-
-
-
-#for i in range(cluster2D_start_switches[0], 1000):
-#     axs[0,0].imshow(images[i],'gray')
-#     # if i in cluster2D_start_switches:
-#     #     sw_start = i
-#     #     is_in_cluster = True
-#     #     c = np.random.rand(3)
-#     #     cluster = cluster2D_start == i
-#     #     sw_end = cluster2D_end[cluster].max()
-#     # if is_in_cluster:
-#     #     q[switchTimes2D==i] = c
-#     #     if i == sw_end:
-#     #         is_in_cluster = False
-#     #         #qq = np.logical_and((cluster2D_start>=sw_start), (cluster2D_end<=sw_end))
-#     #         qq = cluster2D_end==sw_end
-#     #         q[qq] == c
-#     if i in cluster2D_end_switches:
-#         q[cluster2D_end==i] = np.random.rand(3)
-
-#     axs[0,1].imshow(q)
-#     axs[0,1].axis((0,dimY,dimX,0))
-#     for j in range(2):
-#         axs[0,j].get_xaxis().set_visible(False)
-#         axs[0,j].get_yaxis().set_visible(False)
-#     plt.tight_layout()
-#     fname = "frame%04i.png" % i
-#     outFname = os.path.join(outDir, fname)
-#     fig.savefig(outFname, facecolor='gray', edgecolor='gray')
-#     print(outFname)
+for switch in switches[:]:
+    print(switch)
+    fig, axs = plt.subplots(2, 1, figsize=fsize)
+    axs[0].imshow(images[switch] - images[0], 'gray', interpolation='none')
+    #axs[0].plot(X, Y, 'k-', lw=2)
+    axs[1].plot(X, Y, 'w-', lw=1)
+    q = cluster2D_end > switch
+    out = np.copy(cluster2D_end)
+    out[q] = -1
+    axs[1].imshow(out, cmap=cm, norm=norm)
+    for ax in axs:
+        ax.axis((0, c1 - c0, r1 - r0, 0))
+        #ax.grid(True)
+    plt.tight_layout()
+    
+    fname = "frame%04i.jpg" % switch
+    outFname = os.path.join(outDir, fname)
+    fig.savefig(outFname, facecolor='black', edgecolor='black')
+    plt.close(fig)
+    print(outFname)
 # #plt.show()
