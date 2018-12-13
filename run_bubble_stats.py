@@ -59,15 +59,20 @@ class Clusters:
         self.regions = None
         self.centers_of_mass = {}
         self.crops = {}
-        with h5py.File(self._fname, 'a') as f:
-            grp_base = f[self._baseGroup]
+        with h5py.File(self._fname, 'a') as fh:
+            try:
+                grp_base = fh[self._baseGroup]
+            except KeyError:
+                print("Key error for %s" % self._baseGroup)
+                print(self._fname)
+                sys.exit()
             saved_experiments = len(grp_base)
             if len(n_experiments) > saved_experiments:
                 print("There are only %i/%i experiments" % (saved_experiments, self._len_experiments))
                 self.n_experiments = self.n_experiments[:saved_experiments]
             for n_exp in self.n_experiments:
                 grp0 = self._baseGroup + "/%02i" % n_exp
-                grp_n_exp = f[grp0]
+                grp_n_exp = fh[grp0]
                 if "cluster2D_start" in grp_n_exp:
                     self.cluster2D_start[n_exp] = grp_n_exp['cluster2D_start'][...]
                     self.cluster2D_end[n_exp] = grp_n_exp['cluster2D_end'][...]
@@ -79,9 +84,9 @@ class Clusters:
                     print("Cluster2D does not exist for exp: %i" % n_exp)
                 # Get the last contour
                 last_switch = np.unique(self.switchTimes2D[n_exp])[-1]
-                grp_n_exp_contour = f[grp0 + "/contours/%i" % last_switch]
+                grp_n_exp_contour = fh[grp0 + "/contours/%i" % last_switch]
                 self.last_contour[n_exp] = grp_n_exp_contour[...]
-                grp_n_exp_contour = f[grp0 + "/contours/0"]
+                grp_n_exp_contour = fh[grp0 + "/contours/0"]
                 self.first_contour = grp_n_exp_contour[...]
                 # Check if times exist
                 if 'times' in grp_n_exp:
@@ -145,7 +150,7 @@ class Clusters:
         times = (times - times[0]) / 1000.
         return times
         
-    def get_event_stats(self, min_size=1, former_switches=10):
+    def get_event_stats(self, min_size=1):
         """
         get the distribution of the events
         (switches between two frames)
@@ -231,8 +236,8 @@ class Clusters:
         self.all_events_shuffle = pd.concat([self.event_data_shuffle[cl] for cl in self.event_data_shuffle])
         self.cdf = self.get_cdf(self.all_events.event_size)
         self.p_large_size = self._get_prob_p()
-        self._cluster2D_nij = self._sum_maps(self.labeledEvents2D)
-        self.center = self._get_center_mahotas(self._cluster2D_nij)
+        self.event2D = self._sum_maps(self.labeledEvents2D)
+        self.center = self._get_center_mahotas(self.event2D)
         self.max_label = np.array(self.max_label)
         return 
 
@@ -248,7 +253,7 @@ class Clusters:
         return p
 
 
-    def _get_nij(self, record, df, frac_dim=1, distance='euclidean'):
+    def _get_nij(self, _record, df, frac_dim=1, limits=None, distance='arc'):
         """
         find the minumum n_ij for an event j
         identified by record
@@ -259,13 +264,15 @@ class Clusters:
         distance : str
             Can be 'euclidean' or 'arc'
         """
-        t = record.switch_time - df.switch_time
-        X0, Y0 = record.event_positionX, record.event_positionY
+        t = _record.switch_time - df.switch_time
+        p = self.p_large_size[df.event_size]
+        p = p.values
+        X0, Y0 = _record.event_positionX, _record.event_positionY
         X, Y = df.event_positionX, df.event_positionY
         if distance == 'euclidean':
             l = ((X-X0)**2 + (Y-Y0)**2)**0.5
         elif distance == 'arc':
-            n_exp = record.n_exp.astype(int)
+            n_exp = _record.n_exp.astype(int)
             Xc, Yc = self.centers_of_mass[n_exp]
             x0, y0 = (X0 - Xc), (Y0 - Yc)
             theta0 = np.arctan2(y0, x0)
@@ -277,25 +284,41 @@ class Clusters:
             r_s = dthetas * R0
             dR = np.abs(Rs - R0)
             l = (dR * dR + r_s * r_s)**0.5
+            if limits is not None:
+                angle, pR = limits
+                dR_p = dR / R0 * 100
+                dthetas = dthetas * 180. / np.pi
+                _where = (dR_p <= pR) & (dthetas <= angle)
+                if not np.sum(_where):
+                    return 4 * [None]
+                else:
+                    l = l[_where]
+                    t = t[_where]
+                    p = p[_where]
         elif distance == 'solidity':
             pass
-        p = self.p_large_size[df.event_size]
-        n_ij = t * l**frac_dim * p.values
+        n_ij = t * l**frac_dim * p
+        t_ij = t * p**0.5
+        #r_ij = l**frac_dim * p.values**0.5
         #pos = n_ij.values.argmin()
         idxmin_n_ij, min_n_ij = int(n_ij.idxmin()), n_ij.min()
+        t_ij = t_ij[idxmin_n_ij]
         label = df.event_label.loc[idxmin_n_ij]
         if np.isnan(min_n_ij):
-            return 3 * [None]
+            return 4 * [None]
         else:
-            return idxmin_n_ij, int(label), min_n_ij
+            return idxmin_n_ij, int(label), min_n_ij, t_ij
 
     def get_correlation(self, df, event_size_threshold=1, 
-                        frac_dim=1, former_switches=None, label=None):
+                        frac_dim=1, previous_frames=None, label=None,
+                        internal_reshuffle=False, limits=None):
         """
         df is the dataFrame:
         it can be self.all_events or self.all_events_shuffle
-        former_switches: int
+        previous_frames: int
             set the number of previous switches to consider n_ij
+        limits : tuple
+            set the limits to consider angles (in degree) and % of radius
         """
         #connected_to = []
         print(60*"*")
@@ -303,10 +326,11 @@ class Clusters:
         if label:
             s += label
         print(s)
-        n_ij = {}
         connected_to = defaultdict(list)
+        if internal_reshuffle:
+            connected_to_shuffled = defaultdict(list)
         for n_exp in self.n_experiments:
-            i_n_exp, record_i, idx_n_ij, nij = [], [], [], []
+            print("Experiment: %i" % n_exp)
             q = df[df.n_exp==n_exp]
             q = q[q.event_size >= event_size_threshold]
             times = np.unique(q.switch_time)
@@ -314,40 +338,91 @@ class Clusters:
             first_index = (q.switch_time==times[1]).idxmax()
             #connected_to += first_index*[np.NaN]
             for i in q.index[q.index >= first_index]:
-                record = q.loc[i]
-                #time_i = record.switch_time
-                #sub_q = q[q.switch_time<time_i]
-                switch_i = int(record.switch_frame)
-                sub_q = q[q.switch_frame < switch_i]
-                if former_switches:
-                    sub_q = sub_q[sub_q.switch_frame > (switch_i - former_switches)]
+                _record = q.loc[i]
+                switch_i = int(_record.switch_frame)
+                _where = q.switch_frame < switch_i
+                if previous_frames:
+                    if previous_frames < (switch_i - q.switch_frame.iloc[0]):
+                        _where = (q.switch_frame > (switch_i - previous_frames)) & _where
+                sub_q = q[_where]
                 if sub_q.empty:
-                    print("%i frame is empty" % i)
-                try:
-                    idxmin_n_ij, label_n_ij, min_n_ij = self._get_nij(record, sub_q, frac_dim, distance='arc')
-                except AttributeError:
-                    print(record)
+                    print(_record)
+                    print(switch_i)
+                    print(q.switch_frame.iloc[0])
                     print(sub_q)
-                    sys.exit()
+                    print(i)
+                    print("empty")
+                    continue
+                idxmin_n_ij, label_n_ij, min_n_ij, t_ij = self._get_nij(_record, sub_q, frac_dim, limits)
+                # try:
+                #     idxmin_n_ij, label_n_ij, min_n_ij, t_ij = self._get_nij(_record, sub_q, frac_dim, limits)
+                # except (AttributeError, ValueError):
+                #     print(switch_i)
+                #     print(q.switch_frame.iloc[0])
+                #     print(_record)
+                #     print(sub_q)
+                #     print(_where)
+                #     sys.exit()
                 if min_n_ij:
                     connected_to['n_exp'].append(n_exp)
                     connected_to['event_idx'].append(i)
-                    connected_to['event_label'].append(int(record.event_label))
+                    connected_to['event_label'].append(int(_record.event_label))
                     connected_to['father_idx'].append(idxmin_n_ij)
                     connected_to['father_label'].append(label_n_ij)
-                    connected_to['n_ij'].append(min_n_ij)                    
-            #n_ij[n_exp] = nij
-        cols = ['n_exp', 'event_idx', 'event_label', 'father_idx', 'father_label', 'n_ij']
+                    connected_to['n_ij'].append(min_n_ij)
+                    connected_to['t_ij'].append(t_ij)
+                    connected_to['r_ij'].append(min_n_ij/t_ij)
+                if internal_reshuffle:
+                    is_internal_reshuffle_on_frame = False
+                    p = np.random.permutation(len(sub_q))
+                    q_shuffled = sub_q.copy()
+                    if is_internal_reshuffle_on_frame:
+                        q_shuffled.switch_frame.iloc[:] = sub_q.switch_frame.values[p]
+                        q_shuffled.switch_time.iloc[:] = sub_q.switch_time.values[p]
+                    else:
+                        q_shuffled.event_label.iloc[:] = sub_q.event_label.values[p]
+                        q_shuffled.event_positionX.iloc[:] = sub_q.event_positionX.values[p]
+                        q_shuffled.event_positionY.iloc[:] = sub_q.event_positionY.values[p]
+                        q_shuffled.event_size.iloc[:] = sub_q.event_size.values[p]
+                    idxmin_n_ij, label_n_ij, min_n_ij, t_ij = self._get_nij(_record, q_shuffled, frac_dim, limits)
+                    if min_n_ij:
+                        r_ij = min_n_ij/t_ij
+                        connected_to_shuffled['n_exp'].append(n_exp)
+                        connected_to_shuffled['event_idx'].append(i)
+                        connected_to_shuffled['event_label'].append(int(_record.event_label))
+                        connected_to_shuffled['father_idx'].append(idxmin_n_ij)
+                        connected_to_shuffled['father_label'].append(label_n_ij)
+                        connected_to_shuffled['n_ij'].append(min_n_ij)
+                        connected_to_shuffled['t_ij'].append(t_ij)
+                        connected_to_shuffled['r_ij'].append(r_ij)
+        cols = ['n_exp', 'event_idx', 'event_label', 'father_idx', 'father_label', 'n_ij', 't_ij', 'r_ij']
         connected_to_df = pd.DataFrame(connected_to, columns=cols)
-        return connected_to_df
+        if internal_reshuffle:
+            connected_to_shuffled_df = pd.DataFrame(connected_to_shuffled, columns=cols)
+            return connected_to_df, connected_to_shuffled_df
+        else:
+            return connected_to_df
 
-    def show_correlation(self, event_size_threshold=5, frac_dim=1, former_switches=None, dx=0.05):
-        label = "real data"
-        #self.n_ij = self.get_correlation(self.all_events, event_size_threshold, frac_dim, former_switches, label)
-        self.con_to_df = self.get_correlation(self.all_events, event_size_threshold, frac_dim, former_switches, label)
-        label = "shuffled data"
-        self.con_to_df_shuffled = self.get_correlation(self.all_events_shuffle, event_size_threshold, frac_dim, former_switches, label)
-        #self.n_ij_shuffle = self.get_correlation(self.all_events_shuffle, event_size_threshold, frac_dim, former_switches, label)
+    def show_correlation(self, event_size_threshold=5, frac_dim=1, previous_frames=None, n_ij_max=None, dx=0.05,
+                        internal_reshuffle=False, limits=None):
+
+        if internal_reshuffle:
+            label = 'internal_reshuffle'
+            self.con_to_df, self.con_to_df_shuffled = self.get_correlation(self.all_events, 
+                                event_size_threshold=event_size_threshold, 
+                                frac_dim=frac_dim, previous_frames=previous_frames, label=label, 
+                                internal_reshuffle=internal_reshuffle, limits=limits)   
+        else:
+            label = "real data"
+            self.con_to_df = self.get_correlation(self.all_events, 
+                                        event_size_threshold=event_size_threshold, 
+                                        frac_dim=frac_dim, previous_frames=previous_frames, 
+                                        label=label, internal_reshuffle=False, limits=limits)
+            label = "shuffled data"
+            self.con_to_df_shuffled = self.get_correlation(self.all_events_shuffle,
+                                        event_size_threshold=event_size_threshold, 
+                                        frac_dim=frac_dim, previous_frames=previous_frames, 
+                                        label=label, internal_reshuffle=False, limits=limits)
                             
         # Plot them all
         bins = np.arange(0,5.+dx,dx)
@@ -361,12 +436,38 @@ class Clusters:
             n_ij_shuffled = self.con_to_df_shuffled['n_ij']
             fig, ax = plt.subplots(1, 1)
             h_ij, h_bins, patches = ax.hist(n_ij, bins=bins, alpha=0.5, label='real data')
-            self.h_ij_real = h_ij_real = pd.Series(h_ij, index=h_bins[:-1])
+            self.h_ij_real = pd.Series(h_ij, index=h_bins[:-1])
             h_ij, h_bins, patches = ax.hist(n_ij_shuffled, bins=bins, alpha=0.5, label='shuffled')
             self.h_ij_shuffled = pd.Series(h_ij, index=h_bins[:-1])
             ax.set_xlabel(r"$n_{ij}$", size=26)
             ax.set_ylabel(r"$hist(n_{ij})$", size=26)
+            ax.get_yaxis().set_tick_params(which='both', direction='in')
+            ax.get_xaxis().set_tick_params(which='both', direction='in')
+            ax.xaxis.set_ticks_position('both')
+            ax.yaxis.set_ticks_position('both')
             ax.legend()
+            # 2D plot
+            cols = 2
+            fig1, axs = plt.subplots(cols, cols, squeeze=False)
+            #ax1.hist2d(r_ij, t_ij, bins=bins)
+            labels = ['real', 'shuffled']
+            for i, df in enumerate([self.con_to_df, self.con_to_df_shuffled]):
+                r_ij, t_ij = df['r_ij'], df['t_ij']    
+                axs[i,0].loglog(r_ij, t_ij, 'o', c='C%i' % i, label=labels[i])
+                axs[i,0].legend()
+                x,y = np.log10(r_ij), np.log10(t_ij)
+                axs[i,1].hist2d(x, y, bins=50, norm=colors.LogNorm())
+                if n_ij_max:
+                    X = np.linspace(np.min(x), np.max(x))
+                    Y = -frac_dim * X + np.log10(n_ij_max)
+                    axs[i,1].plot(X,Y,'r--') 
+
+                for j in range(cols):
+                    axs[i,j].set_xlabel(r"$r^{*}$", size=26)
+                    axs[i,j].set_ylabel(r"$\tau^{*}$", size=26)
+            #ax1.legend()
+	        fig.tight_layout()
+	        fig1.tight_layout()
         else:
             n_figs = len(self.n_experiments)
             rows, cols = self._get_rows_cols(n_figs)
@@ -408,7 +509,7 @@ class Clusters:
         print("Getting cluster with n_ij")
         c = self._get_clusters_nij(df, max_nij)
         print("Preparing the map")
-        _cluster2D_nij = self._cluster2D_nij.copy()
+        _cluster2D_nij = self.event2D.copy()
         for label, new_label in zip(c.event_label, c.gfather_label):
             q = _cluster2D_nij == label
             _cluster2D_nij[q] = new_label
@@ -434,34 +535,8 @@ class Clusters:
         cdf = np.cumsum(counts)
         return pd.Series(cdf, index=bin_edges[1:])
 
-    def get_cluster_stats_from_nj(self, image2D, _string=None):
-        print(60*"*")
-        print("Get the statistics of the clusters for each experiment %s" % _string)
-        cluster_data = dict()
-        t0 = 0.
-        cluster_cols = ['n_exp', 'switch_frame', 'switch_time', 'cluster_size', 'cluster_duration']
-        _cluster_data = defaultdict(list)
-        ############################################
-        cluster2D_start = image2D.copy()
-        cluster2D_end = None
-        cluster_switches = np.unique(cluster2D_start)[1:] # the -1 are not considered!
-        time = np.NAN
-        n_exp = np.NAN
-        for switch in cluster_switches:
-            size = np.sum(cluster2D_start==switch)
-            if size < self.min_size:
-                continue
-            duration = np.NAN
-            # Save the data
-            _cluster_data['n_exp'].append(n_exp)
-            _cluster_data['switch_frame'].append(switch)
-            _cluster_data['switch_time'].append(time)
-            _cluster_data['cluster_size'].append(size)
-            _cluster_data['cluster_duration'].append(duration)        
-        all_clusters = pd.DataFrame(_cluster_data, columns=cluster_cols)
-        return all_clusters
 
-    def get_cluster_stats_from_nj2(self, image2D, center=None, _string=None):
+    def get_cluster_stats_from_nj2(self, image2D, _string=None):
         print(60*"*")
         print("Get the statistics of the clusters for each experiment %s" % _string)
         cluster_cols = ['n_exp','label', 'area', 'maj_ax_len', 'min_ax_len']
@@ -552,15 +627,12 @@ class Clusters:
         all_clusters = pd.concat([cluster_data[n_exp] for n_exp in self.n_experiments])
         return all_clusters
 
-
-    def plot_cluster_stats(self, cluster_sizes, log_step=0.1, n_params=3, p0=None,
-        min_index=2, max_index=-2, fig=None, lb=None, color='b'):
+    def get_best_fit(self, x, y, y_err, n_params, p0, min_index=2, max_index=-2,):
         sd = bestfit.Size_Distribution(n_params)
-        S, PS, PS_err = gLD.logDistribution(cluster_sizes, log_step=log_step)
-        S, PS, PS_err = S[min_index:max_index], PS[min_index:max_index], PS_err[min_index:max_index]
-        w = PS != 0
-        S, PS, PS_err = S[w], PS[w], PS_err[w]
-        model = bestfit.Model(S, PS, theory=sd, p0=p0, y_err=None, linlog='log', use_jacobian=False)
+        x, y, y_err = x[min_index:max_index], y[min_index:max_index], y_err[min_index:max_index]
+        w = y != 0
+        x, y, y_err = x[w], y[w], y_err[w]
+        model = bestfit.Model(x, y, theory=sd, p0=p0, y_err=None, linlog='log', use_jacobian=False)
         params, errors, ier = model.get_params()
         if ier in range(1,5) and errors is not None:
             for pars in zip(sd.params, params, errors):
@@ -568,6 +640,18 @@ class Clusters:
         else:
             for pars in zip(sd.params, params):
                 print("%s: %.2f" % pars)
+        x_calc = np.logspace(np.log10(np.min(x)), np.log10(np.max(x)), 2*len(x))
+        if ier != 0:
+            y_calc = sd.y(params, x_calc)
+            return params, errors, ier, x_calc, y_calc
+        else:
+            return params, errors, ier, None, None
+
+    def plot_cluster_stats(self, cluster_sizes, log_step=0.1, n_params=3, p0=None,
+        min_index=2, max_index=-2, fig=None, lb=None, color='b'):
+        S, PS, PS_err = gLD.logDistribution(cluster_sizes, log_step=log_step)
+        params, errors, ier, S_calc, PS_calc = self.get_best_fit(S, PS, PS_err, 
+                            n_params, p0, min_index, max_index)
         # Plot the distribution of the cluster area
         if fig is None:
             fig, ax = plt.subplots(1,1)
@@ -575,9 +659,8 @@ class Clusters:
             ax = fig.gca()
         ax.loglog(S, PS, 'o', color=color, label=lb)
         ax.errorbar(S, PS, PS_err, fmt="none")
-        S_calc = np.logspace(np.log10(np.min(S)), np.log10(np.max(S)), 2*len(S))
         if ier != 0:
-            ax.loglog(S_calc, sd.y(params, S_calc), '--', color=color)
+            ax.loglog(S_calc, PS_calc, '--', color=color)
         ax.legend(loc=3)
         ax.set_xlabel("$S_{Clust}$", size=20)
         ax.set_ylabel("$P(S_{Clust})$", size=20)
@@ -611,7 +694,6 @@ class Clusters:
         # ax.set_ylabel("$\Delta t_{Clust} - ave$", size=20)
         # #ax.set_title("title goes here")
         plt.show()
-        S, PS, PS_err
         d = {'S': S, 'PS': PS, 'PS_err': PS_err}    
         df_PS = pd.DataFrame(d, columns=['S', 'PS', 'PS_err'])
         return df_PS, fig
@@ -656,7 +738,7 @@ class Clusters:
         for i in indx:
             reg = self.regions[i]
             r0,c0,r1,c1 = reg.bbox
-            qq = image2D[r0-pxl_step:r1+pxl_step, c0-pxl_step:c1+pxl_step]
+            qq = image2D[r0 - pxl_step: r1 + pxl_step, c0 - pxl_step: c1 + pxl_step]
             b = Counter(qq.flatten())
             for key in [-1,reg.label]:
                 b.pop(key, None)
@@ -718,6 +800,8 @@ class Clusters:
     def plot_cluster_lengths(self, clusters, min_solidity=0.7, log_step=0.1, zeta=0.633, ms=8):
         sizes = clusters.area
         major_axis_lengths = clusters.maj_ax_len
+        d = {'Length': major_axis_lengths, 'Size': sizes}
+        df_S_vs_l = pd.DataFrame(d, columns=['Length', 'Size'])
         # Plot size vs. lengths
         fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))
         ax.loglog(major_axis_lengths, sizes, 'o', ms=6, label=r'$S$')
@@ -732,30 +816,47 @@ class Clusters:
         l, s = gLD.averageLogDistribution(v, log_step=log_step)
         ax.loglog(l,s, 'ro', label=r'$\langle S \rangle$')
         lb = r'$\zeta$ = %.3f' % zeta
-        ax.loglog(l[1:-8], s[5]*(l[1:-8]/l[5])**(1.+zeta), 'k--', ms=8, label=lb)
+        ax.loglog(l[1:-4], s[5]*(l[1:-4]/l[5])**(1.+zeta), 'k--', ms=8, label=lb)
         ax.legend()
         ax.grid(True)
+        d = {'length': l, 'S_mean': s}    
+        df_S_mean = pd.DataFrame(d, columns=['length', 'S_mean'])
         ###############################################
         # Plot distribution lengths
-        fig, ax = plt.subplots(1,1, figsize=(8.5,6.5))    
+        fig, axs = plt.subplots(1,2, figsize=(17,6.5))    
         #for n_exp in self.n_experiments:
         #    c = clusters[clusters.n_exp == n_exp]
         #    major_axis_lengths = c.maj_ax_len
         if min_solidity:
             clusters = clusters[clusters.solidity >= min_solidity]
+        ll, pll, pll_err = gLD.logDistribution(clusters.maj_ax_len, log_step=log_step)
+        print("################################## Fitting length distribution")
+        params, errors, ier, ll_calc, pll_calc = self.get_best_fit(ll, pll, pll_err, n_params=3, p0=None, min_index=2, max_index=None)  
+        d = {'length': ll, 'P_length': pll}    
+        df_P_lenghts = pd.DataFrame(d, columns=['length', 'P_length'])
+        axs[0].loglog(ll, pll, 'o', ms=ms)
+        axs[0].set_xlabel(r"Major axis length $L$", size=20)    
+        axs[0].set_ylabel(r"Length distribution $P(L)$", size=20)
+        if ier != 0:
+            axs[0].loglog(ll_calc, pll_calc, 'k--', label = "best fit")
+        axs[0].legend()
+        axs[0].grid(True)
+        # Normalized
         l_d =  clusters.maj_ax_len / clusters.dist_to_center
-        ll, pll, pll_err = gLD.logDistribution(l_d, log_step=log_step)
-        #ax.loglog(ll, pll, 'o', ms=ms, label='n_exp = %i' % n_exp)
-        #ax.set_xlabel(r"Major axis length $L$", size=20)    
-        ax.loglog(ll, pll, 'o', ms=ms)
-        ax.set_xlabel(r"Normalized major axis length $L$", size=20)    
-        ax.set_ylabel(r"Length distribution $P(L)$", size=20)
-        ax.loglog(ll, pll[8]*(ll/ll[8])**(-1.5), 'k--', label = "1.5 slope")
-        #ax.loglog(ll, pll[8]*(ll/ll[8])**(-1.5)*np.exp(-ll/.4), 'k--', label = "1.5 slope with exp")
-        ax.loglog(ll, .12*(ll/.028)**(-1.5) * np.exp(-(ll/.1)**1.5), lw=2)
-        ax.legend()
-        ax.grid(True)
+        ll_norm, pll_norm, pll_err_norm = gLD.logDistribution(l_d, log_step=log_step)
+        print("################################## Fitting normalized length distribution")
+        params, errors, ier, ll_norm_calc, pll_norm_calc = self.get_best_fit(ll_norm, pll_norm, pll_err_norm, n_params=3, p0=None, min_index=3, max_index=None)
+        d = {'length': ll_norm, 'P_length': pll_norm}    
+        df_P_lenghts_norm = pd.DataFrame(d, columns=['length', 'P_length'])
+        axs[1].set_xlabel(r"Normalized major axis length $L$", size=20)    
+        axs[1].set_ylabel(r"Length distribution $P(L)$", size=20)
+        axs[1].loglog(ll_norm, pll_norm, 'o', ms=ms)
+        if ier != 0:
+            axs[1].loglog(ll_norm_calc, pll_norm_calc, 'k--', label = "best fit")
+        axs[1].legend()
+        axs[1].grid(True)
         plt.show()
+        return df_S_vs_l, df_S_mean, df_P_lenghts, df_P_lenghts_norm
 
 
 def plot_cluster_stats_all_area(clusters, log_step=0.1):
@@ -801,6 +902,7 @@ if __name__ == "__main__":
     choice = sys.argv[1]
     try:
         irradiation = sys.argv[1]
+        current_field = sys.argv[2]
     except:
         irradiation = 'Irr_800uC'
     
@@ -848,89 +950,137 @@ if __name__ == "__main__":
         irradiation = irradiation[:-6]
 
     elif irradiation == 'NonIrr_Dec18':
-        fields = ["0.137", "0.146", "0.157", "0.165"]
-        field = fields[1]
+        #currents_fields = ["0.137", "0.146", "0.157", "0.165"]
+        #current_field = currents_fields[2]
         set_n = "Set1"
-        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/%sA/" % field
+        zeta = 0.633
+        d_f = 1
+        previous_frames = None
+        ###########################
+        internal_reshuffle = True
+        #d_f = 1 + zeta
+        limits = (180, 20)
+        #limits = None
+        ###########################
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/%sA/" % current_field
         fieldDir = os.path.join(mainDir, set_n)
-        hdf5_filename = "%sA.hdf5" % field
+        hdf5_filename = "%sA.hdf5" % current_field
         hdf5_filename_results = "Results_NonIrr_Feb2018.hdf5"
-        currents = fields[1:2]
-        ns_experiments = {"0.137": range(2, 16), "0.146": range(7,9), "0.157": [2,3,4,5], "0.165": range(1,5)}
-
-
-        if field == "0.137":
-            nij_list, clrs = [0.44], ['r']
-        elif field == "0.146":
-            nij_list, clrs = [0.33], ['r']           
-        elif field == "0.157":
-            nij_list, clrs = [0.25], ['r']
-        elif field == "0.165":
-            nij_list, clrs = [0.15], ['r']
-        
+        ns_experiments = {"0.137": range(2, 16), "0.146": range(1,9), 
+                          "0.157": [2,3,4,5], "0.165": range(1,5)}
+        # ns_experiments = {"0.137": range(2, 16), "0.146": range(1,9), 
+        #                   "0.157": [2,3], "0.165": range(1,5)}
+        if current_field == "0.137":
+            n_ij_max, _clr = 0.44, 'r'
+            #nij_list, clrs = [1.44], ['r']
+        elif current_field == "0.146":
+            n_ij_max, _clr = 0.33, 'r'
+            #nij_list, clrs = [1.23], ['r']
+        elif current_field == "0.157":
+            n_ij_max, _clr = 0.25, 'r'
+            #nij_list, clrs = [1.25], ['r']
+        elif current_field == "0.165":
+            n_ij_max, _clr = 0.19, 'r'
+            #nij_list, clrs = [1.5], ['r']
         min_size, hist_dx = 5, 0.01
 
+    field  = "%sA" % (current_field)
+    print("Analysing %s" % field)
+    n_experiments = ns_experiments[current_field]
+    start = datetime.datetime.now()
+    #clusters[current] = Clusters(mainDir, grp0, n_experiments, irradiation, skip_first_clusters=0, min_size=min_size)
+    cl = Clusters(mainDir, hdf5_filename, field, n_experiments, set_n=set_n,
+                    fieldDir=fieldDir, skip_first_clusters=0, min_size=min_size)
+    clusters[current_field] = cl
+    #continue
+    # Get the statistic of the events
+    cl.get_event_stats()
+    PS_events, fig0 = cl.plot_cluster_stats(cl.all_events.event_size.values, p0=None, lb='raw events', color='g')
+    #sys.exit()
+    start1 = datetime.datetime.now()
+    diff = start1 - start
+    print_time(diff)
+    #sys.exit()
+    # Clusters as usual 
+    all_clusters = cl.get_cluster_stats_from_dict(cl.cluster2D_start, 'adiacent events')
+    PS_touch, fig0 = cl.plot_cluster_stats(all_clusters.cluster_size.values, 
+        fig=fig0, lb='from touching events', color='b')
+    start2 = datetime.datetime.now()
+    diff = start2 - start1
+    print_time(diff)
+    # Cluster with n_ij
+    cl.show_correlation(event_size_threshold=min_size, dx=hist_dx, frac_dim=d_f, 
+                    previous_frames=previous_frames, n_ij_max=n_ij_max, 
+                    internal_reshuffle=internal_reshuffle, limits=limits)
+    start3 = datetime.datetime.now()
+    diff = start3 - start2
+    print_time(diff)
+    up_dir = str(Path(mainDir).parent)
+    hname = os.path.join(up_dir, hdf5_filename_results)
+    store = pd.HDFStore(hname)
+    subDir = "%s/%s/df_%.3f/nij_%.2f" % (field, set_n, d_f, n_ij_max)
+    # ################################
+    #save_data = raw_input("Save dataFrames? ")
+    save_data = "Y"
+    if save_data.upper() == 'Y':
+        # Save to the upper directory into a hdf5
+        distrs = [cl.con_to_df, cl.con_to_df_shuffled]
+        _distrs = ['all_events_hierarchy', 'all_events_hierarchy_shuffled']
+        for df, _distr in zip(distrs, _distrs):
+            group = "%s/%s" % (subDir, _distr)
+            store[group] = df
 
-    for current in currents:  
-        field  = "%sA" % (current)
-        print("Analysing %s" % field)
-        n_experiments = ns_experiments[current]
-        start = datetime.datetime.now()
-        #clusters[current] = Clusters(mainDir, grp0, n_experiments, irradiation, skip_first_clusters=0, min_size=min_size)
-        cl = Clusters(mainDir, hdf5_filename, field, n_experiments, set_n=set_n,
-            fieldDir=fieldDir, skip_first_clusters=0, min_size=min_size)
-        clusters[current] = cl
-        #continue
-        # Get the statistic of the events
-        cl.get_event_stats()
-        PS_events, fig0 = cl.plot_cluster_stats(cl.all_events.event_size.values, p0=None, lb='raw events', color='g')
-        #sys.exit()
-        start1 = datetime.datetime.now()
-        diff = start1 - start
-        print_time(diff)
-        #sys.exit()
-        # Clusters as usual 
-        #all_clusters = cl.get_cluster_stats_from_dict(cl.cluster2D_start, 'adiacent events')
-        #PS_touch, fig0 = cl.plot_cluster_stats(all_clusters.cluster_size.values, 
-        #    fig=fig0, lb='from touching events', color='b')
-        start2 = datetime.datetime.now()
-        diff = start2 - start1
-        print_time(diff)
-        # Cluster with n_ij
-        cl.show_correlation(event_size_threshold=min_size, dx=hist_dx)
-        all_clusters_nij = {}
-        cluster2D_nij = {}
-        ####################################
-        for clr, nij_max in zip(clrs,nij_list):
-            lb = 'from n_ij = %.2f' % nij_max
-            title = r"clusters with $n_{ij} = %.2f$" % nij_max
-            cln = cl.get_clusters_nij(cl.con_to_df, nij_max, title=title)
-            cluster2D_nij[nij_max] = cln
-            #ac = cl.get_cluster_stats_from_nj2(cln, 'events with nij: %.2f' % nij_max)
-            #all_clusters_nij[nij_max] = ac
-            #PS_nij, fig = cl.plot_cluster_stats(ac.area.values, fig=fig0, lb=lb, color=clr)
-            #cl.plot_cluster_maps(cl.cluster2D_start, cln)
-            cln_filtered = cl.clean_small_clusters(cln)
-            ac_filtered = cl.get_cluster_stats_from_nj2(cln_filtered, 
-                                                'events with nij: %.2f, filtered' % nij_max)
-            PS_nij_filtered, fig = cl.plot_cluster_stats(ac_filtered.area.values, 
-                                    fig=fig0, lb=lb+' filtered', color='m', max_index=None)
-            
-            cl.plot_cluster_maps(cl.cluster2D_start, cln, cln_filtered)
-            cl.plot_cluster_lengths(ac_filtered)
-        start3 = datetime.datetime.now()
-        diff = start3 - start2
-        print_time(diff)
-        save_data = raw_input("Save data?")
-        if save_data.upper() == 'Y':
-            # Save to the upper directory into a hdf5
-            up_dir = str(Path(mainDir).parent)
-            hname = os.path.join(up_dir, hdf5_filename_results)
-            store = pd.HDFStore(hname)
-            subDir = "%s/%s" % (field, set_n)
-            distrs = [PS_events, PS_touch, PS_nij, PS_nij_filtered, cl.h_ij_real, cl.h_ij_shuffled]
-            _distrs = ['PS_events', 'PS_touch', 'PS_nij', 'PS_nij_filtered', 'h_ij_real', 'h_ij_shuffled']
-            for d, s in zip(distrs, _distrs):
-                group = "%s/%s" % (subDir,s)
-                store[group] = d
-            store.close()
+    all_clusters_nij = {}
+    cluster2D_nij = {}
+    if False:
+        store.close()
+        sys.exit()
+    ####################################
+    
+    lb = 'from n_ij = %.2f' % n_ij_max
+    title = r"clusters with $n_{ij} = %.2f$" % n_ij_max
+    cln = cl.get_clusters_nij(cl.con_to_df, n_ij_max, title=title)
+    cluster2D_nij[n_ij_max] = cln
+    #ac = cl.get_cluster_stats_from_nj2(cln, 'events with nij: %.2f' % n_ij_max)
+    #all_clusters_nij[n_ij_max] = ac
+    #PS_nij, fig = cl.plot_cluster_stats(ac.area.values, fig=fig0, lb=lb, color=clr)
+    #cl.plot_cluster_maps(cl.cluster2D_start, cln)
+    cln_filtered = cl.clean_small_clusters(cln)
+    ac_filtered = cl.get_cluster_stats_from_nj2(cln_filtered, 
+                                        'events with nij: %.2f, filtered' % n_ij_max)
+    PS_nij_filtered, fig = cl.plot_cluster_stats(ac_filtered.area.values, 
+                            fig=fig0, lb=lb+' filtered', color='m', max_index=None)     
+    cl.plot_cluster_maps(cl.cluster2D_start, cln_filtered)
+    df_S_vs_l, df_S_mean, df_P_lenghts, df_P_lenghts_norm = cl.plot_cluster_lengths(ac_filtered)
+    ##############################
+    #save_data = raw_input("Save distributions? ")
+    if save_data.upper() == 'Y':
+        # Save to the upper directory into a hdf5
+        distrs = [PS_events, PS_nij_filtered, cl.h_ij_real, cl.h_ij_shuffled]
+        distrs += [df_S_vs_l, df_S_mean, df_P_lenghts, df_P_lenghts_norm]
+        _distrs = ['PS_events', 'PS_nij_filtered', 'h_ij_real', 'h_ij_shuffled']
+        _distrs += ['S_vs_l', 'S_mean', 'P_lenghts', 'P_lenghts_norm']
+        for df, _distr in zip(distrs, _distrs):
+            group = "%s/%s" % (subDir, _distr)
+            store[group] = df
+    #save_data = raw_input("Save cluster2D? ")
+    if save_data.upper() == 'Y':
+        # Save to the upper directory into a hdf5
+        cluster2D_start = cl._sum_maps(cl.cluster2D_start)
+        cluster2D_end = cl._sum_maps(cl.cluster2D_end)
+        distrs = [cln_filtered, cl.event2D, cluster2D_start, cluster2D_end]
+        _distrs = ["cluster2D_nij", 'event2D', 'cluster2D_start', 'cluster2D_end']
+        for d, _distr in zip(distrs, _distrs):
+            group = "%s/%s" % (subDir, _distr)
+            df = pd.DataFrame(d)
+            store[group] = df
+    #save_data = raw_input("Save dataFrames? ")
+    if save_data.upper() == 'Y':
+        # Save to the upper directory into a hdf5
+        distrs = [ac_filtered, cl.all_events]
+        _distrs = ["all_clusters_nij_structure", 'all_events_structure']
+        for df, _distr in zip(distrs, _distrs):
+            group = "%s/%s" % (subDir, _distr)
+            store[group] = df
+    print("Center:", cl.center)
+    store.close()

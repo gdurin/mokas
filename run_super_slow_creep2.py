@@ -1,4 +1,4 @@
-import sys, os
+iimport sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 import visualBarkh as bk

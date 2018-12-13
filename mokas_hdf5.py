@@ -261,13 +261,13 @@ class RootHdf5:
         and change them into strings
         """
         signature_hdf5 = {}
-        for key, elem in signature_np.iteritems():
+        for key, elem in signature_np.items():
             signature_hdf5[key] = np.string_(elem)
         return signature_hdf5
 
     def to_signature_numpy(self, signature_hdf5):
         signature_np = np.copy(signature_hdf5)
-        for key, elem in signature_hdf5.iteritems():
+        for key, elem in signature_hdf5.items():
             if elem is 'True' or elem is 'False':
                 signature_np[key] == 'True'
             elif elem is 'None':

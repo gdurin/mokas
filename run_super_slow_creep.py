@@ -2,7 +2,7 @@ import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 import visualBarkh as bk
-import cPickle as pickle
+import pickle
 import mokas_bubbles as mkb
 from natsort import natsorted
 import glob, re
@@ -158,7 +158,8 @@ if __name__ == "__main__":
 	#rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
         #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
         rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/No_set" % (irradiation,current)
-
+        current = "0.174"
+        rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/Set1" % (irradiation,current)
         
 
         if not os.path.isdir(rootDir):

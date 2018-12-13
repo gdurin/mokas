@@ -257,8 +257,12 @@ if __name__ == "__main__":
             imParameters['subtract'] = None # Subtract a reference image
             threshold = 2
             palette = 'coolwarm'
-        elif k[3:] == "Irr_16e8He+_0.116A_3s":
-            rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/"
+        #elif k[3:] == "Irr_16e8He+_0.116A_3s":
+        elif k[3:] == "Irr_800uC_0.232A":
+            #/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/0.232A/01_Irr_800uC_0.232A
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC_16e8He+/"
+            #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/0.232A"
+            rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/Irr_800uC/Dec2016/0.232A/"
             rootDir = os.path.join(rootDir, k)
             imParameters['pattern'] = "%s_MMStack_Pos0.ome.tif" % k
             imParameters['imCrop'] = None
@@ -267,8 +271,9 @@ if __name__ == "__main__":
             imParameters['filtering'] = 'gauss'
             imParameters['sigma'] = 2
             imParameters['subtract'] = None # Subtract a reference image
-            threshold = 12
+            threshold = 20
             palette = 'coolwarm'
+            erase_small_events_percent = 10
         elif k == "B38":
             rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Bhaskar/B38_annealed"
             imParameters['pattern'] = "bubbleUltraSlowCreep_9mV_0.38mT_01.avi"
@@ -294,14 +299,14 @@ if __name__ == "__main__":
         imParameters['subDirs'] = [rootDir, "", "", "", ""]
         #A possible improvement is that stackImages returns also the threshold value extracting the information when uploading the images
         imArray = bk.StackImages(**imParameters)
-        plot_contours = True
+        plot_contours = False
         imArray.showColorImage(threshold=threshold, palette=palette, plot_contours=plot_contours, 
             erase_small_events_percent=erase_small_events_percent)
         #imArray.find_contours(lines_color='k', remove_bordering=True, plot_centers_of_mass=False,
         #    plot_rays=False, reference=None,invert_y_axis=True)
         #'center_of_mass')
         #save_data = raw_input("Save the data?")
-        save_data = "Y"
+        save_data = "N"
         if save_data.upper() == "Y":
             if plot_contours:
                 objects_tosave = [imArray._switchTimes2D, imArray._switchSteps2D, imArray.centers_of_mass, imArray.contours]

@@ -10,4 +10,6 @@ mokas_env/
 test.*
 *.dat
 *.png
-dep/*.py
+Dep/
+*.out
+

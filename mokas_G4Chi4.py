@@ -172,7 +172,7 @@ class CalcG4chi4():
         # h = (h(0,t_2) - R_t)/R_t^(1/3)
         h = self.dh/self.mean_radius**(1/3.)
 
-    def _calc_S_q(self, ref_i=(3,40), zeta=2./3):
+    def _calc_S_q(self, ref_i=(3,40), zeta=2./3, is_plot=None):
         """
         Calculation of the structure factor
         As a matter of fact it is a power spectrum in the q space
@@ -187,7 +187,7 @@ class CalcG4chi4():
         d_theta = self.h.index[1] - self.h.index[0]
          # Calculate the q for the theta angles
         q_theta = np.linspace(0.0, 1.0/(2.0*d_theta), N_thetas//2)
-        hq = df.apply(np.fft.fft, axis=0)
+        hq = self.h.apply(np.fft.fft, axis=0)
         hq_conj = hq.apply(np.conjugate)
         sq = np.real(hq * hq_conj)
         sq = sq[:N_thetas//2, :]
@@ -201,9 +201,12 @@ class CalcG4chi4():
             else:
                 sq[:,i] = np.interp(q, q_i, sq[:,i])
         S_q = np.mean(sq, axis=1)
+        _sq = pd.Series(S_q, index=q)
+        if not is_plot:
+            return _sq
         # Plot S(q_theta)
         fig, axs = plt.subplots(1,2)
-        axs[0].loglog(q_theta[1:], S_q_theta[1:], 'ko')
+        axs[0].loglog(q_theta[1:], S_q_theta[1:], 'o', ms=6)
         # Plot the low q depinning exponent (-1)
         i0, i1 = ref_i
         fct = S_q_theta[i0]/q_theta[i0]**(-slope)
@@ -218,7 +221,7 @@ class CalcG4chi4():
         #
         # Plot S(q)
         #
-        axs[1].loglog(q[1:], S_q[1:], 'ko')
+        axs[1].loglog(q[1:], S_q[1:], 'o', ms=6)
         # Plot the low q depinning exponent (-1)
         fct = S_q[i0]/q[i0]**(-slope)
         axs[1].loglog(q, fct*q**(-slope), 'r-', label='slope: %.2f' % slope)
@@ -229,8 +232,7 @@ class CalcG4chi4():
         axs[1].grid(True)
         axs[1].set_xlabel(r"$q$", size=20)
         axs[1].set_ylabel(r"$S(q)$", size=20)
-        sq = pd.Series(S_q, index=q)
-        return sq
+        return _sq
 
     def _calc_G4(self, theta_max=45, time_max=None, theta_step=10, time_step=10):
         # Preliminar dataframes
@@ -308,7 +310,6 @@ class CalcG4chi4():
         self._plot_C(C_r, var='r')
         return G4_theta, G4_r, C_theta, C_r
         
-
     def _plot_C(self, df, var, step=5):
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -360,8 +361,7 @@ class CalcG4chi4():
     
 #plt.close("all")
 if __name__ == "__main__":
-    test = 'meas'
-    #test = 'circle'
+    test = sys.argv[1]
     if test == 'circle':
         N = 361
         k = 5
@@ -430,8 +430,8 @@ if __name__ == "__main__":
         fname = os.path.join(mainDir, hdf5_fname)
         contours = {}
         key_type = np.int
-        with h5py.File(fname, 'a') as f:
-            grp0 = f[baseGroup]['contours']
+        with h5py.File(fname, 'a') as fh:
+            grp0 = fh[baseGroup]['contours']
             for group in grp0: #yes, it looks like a dictionary
                 if key_type:
                     key = key_type(group)
@@ -439,7 +439,7 @@ if __name__ == "__main__":
                     key = group
                 contours[key] = grp0[group][...]
             try:
-                grp0 = f[baseGroup]['times']
+                grp0 = fh[baseGroup]['times']
                 times = grp0[...]
             except:
                 fname = "{0}{1}/{2}_{3}_{1}/times.dat".format(mainDir,field, n_run, str_irr)
@@ -474,16 +474,87 @@ if __name__ == "__main__":
         theta, r, frames = polar.plot_displacement(contours, (yc,xc),reference='center')
         plt.show()
         print("Max time: %d (s), N. time steps: %i" % (times[-1], len(times)))
-        c = CalcG4chi4(df)
-        #G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, steps=(2,5))
-        G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, theta_step=10, time_step=10)
-        S_q = c._calc_S_q(ref_i=(6,40))
         store = pd.HDFStore(fname)
-        store.put(baseGroup+"/S_q", S_q)
-        store.put(baseGroup+"/G4_theta", G4_theta)
-        store.put(baseGroup+"/G4_r", G4_r)
-        store.put(baseGroup+"/C_theta", C_theta)
-        store.put(baseGroup+"/C_r", C_r)
+        c = None
+        if False:
+            c = CalcG4chi4(df)
+            G4_theta, G4_r, C_theta, C_r = c._calc_G4(theta_max=60, theta_step=10, time_step=10)
+            store.put(baseGroup+"/G4_theta", G4_theta)
+            store.put(baseGroup+"/G4_r", G4_r)
+            store.put(baseGroup+"/C_theta", C_theta)
+            store.put(baseGroup+"/C_r", C_r)
+        if True:
+            if not c:
+                c = CalcG4chi4(df)
+            S_q = c._calc_S_q(ref_i=(6,40))      
+            store.put(baseGroup+"/S_q", S_q)
+        store.close()
+    elif test == 'measSq':
+        # not Irradiated
+        str_irr = "NonIrr"
+        n_set = "Set1"
+        #field, n_run = "0.146A", "08"
+        fields = ['0.137', '0.146', '0.157', '0.165']
+        #n_runs = ["10", "08", "05", "04"]
+        n_runs = [range(2,16), range(1,9), range(1,6), range(1,5)]
+        fields_mT = {"0.137": "0.13", "0.146": "0.14", "0.157": "0.15", "0.165": "0.16"}
+        A = {"0.137": 1.6, "0.146": 1, "0.157": 1, "0.165": 3.}
+        imaxs = {"0.137": 200, "0.146": 1200, "0.157": 1200, "0.165": 500}
+        i0, i1 = (6, 40)
+        #slope = 1 + 2 * 2/3.
+        slope = 1 + 2 * 0.633
+        fig, ax = plt.subplots(1,1, figsize=(6,7))
+        key_type = np.int
+        mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/"
+        hdf5_filename_results = "Results_NonIrr_Feb2018.hdf5"
+        hname = os.path.join(mainDir, hdf5_filename_results)
+        store = pd.HDFStore(hname)
+        for i, field, n_run in enumerate(zip(fields[:], n_runs[:])):
+            mainDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/NonIrr/Feb2018/%sA" % field
+            hdf5_fname = "%sA.hdf5" % field
+            ###########################################
+            for nr in n_run:
+                baseGroup = "%s/%sA/%s" % (n_set, field, nr)
+                fname = os.path.join(mainDir, hdf5_fname)
+                contours = {}
+            
+                with h5py.File(fname, 'a') as fh:
+                    grp0 = fh[baseGroup]['contours']
+                    for group in grp0: #yes, it looks like a dictionary
+                        if key_type:
+                            key = key_type(group)
+                        else:
+                            key = group
+                        contours[key] = grp0[group][...]
+                    try:
+                        grp0 = fh[baseGroup]['times']
+                        times = grp0[...]
+                    except:
+                        fname = "{0}{1}/{2}_{3}_{1}/times.dat".format(mainDir,field, n_run, str_irr)
+                        times = np.loadtxt(fname)
+                        times = (times[:,1] - times[0,1])/1000.
+
+                bubble_props = Bubble_properties(contours, times)
+                df = bubble_props.df
+                c = CalcG4chi4(df)
+                S_q = c._calc_S_q()
+                if i == 0:
+                    mean_Sq = S_q
+                else:
+                    mean_Sq += S_q.values
+            S_q = mean_Sq/(i+1)
+            #store.put(baseGroup+"/S_q", S_q)
+            # Plot S(q)
+            sq = S_q.values
+            lb = "%s mT" % fields_mT[field]
+            imax = imaxs[field]
+            ax.loglog(q[1:-imax], A[field]*sq[1:-imax], 'o', ms=4, label=lb)
+        # Plot the low q depinning exponent (-1)
+        ax.loglog(q, 16*q**(-slope), 'k--', label='slope: %.3f' % slope)
+        ax.legend(fontsize=12)
+        ax.grid(True)
+        ax.set_xlabel(r"$q$", size=20)
+        ax.set_ylabel(r"$S(q)$", size=20)
         store.close()
     plt.show()
 

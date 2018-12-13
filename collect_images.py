@@ -399,7 +399,8 @@ def images2array(root_dir, pattern, firstIm=0, lastIm=-1, crop=None, rotation=No
     if hdf5_use:
         if hdf5_signature is not None:
             signature = signature0.copy()
-            for key, item in hdf5_signature.iteritems():
+            #for key, item in hdf5_signature.iteritems():
+            for key, item in hdf5_signature.items():
                 signature[key] = item
         hdf5_data = mhdf5.RootHdf5(root_dir, pattern, signature)
         if not hdf5_data.is_raw_images:

@@ -126,7 +126,8 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
         pColor = [hsv_to_rgb(j/float(n),1, 1) 
                              for j in range(n)]
     elif palette == 'randomRal':
-        pColor = np.random.permutation(ral_colors)[:n]
+        ral_colors = get_ral_colors()[:n]
+        pColor = np.random.permutation(ral_colors)
     elif palette == 'ral':
         pColor = get_ral_colors()[:n]
     else:
@@ -155,5 +156,5 @@ def getPalette(n, palette='ral', noSwitchColor='white', koreanPalette=None):
 
 if __name__ == "__main__":
     cw = get_cmap(134, 'coolwarm')
-    print cw
+    print(cw)
 

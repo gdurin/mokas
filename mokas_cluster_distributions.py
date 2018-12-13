@@ -1,6 +1,8 @@
 import sys, os
 import numpy as np
 from scipy.integrate import trapz
+#from scipy.optimize import fsolve
+from scipy import optimize
 import getLogDistributions as gLD
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -15,6 +17,9 @@ import mahotas
 from mokas_colors import get_liza_colors
 import ast
 import mokas_parser as mkp
+
+
+
 
 class Clusters:
 
@@ -64,6 +69,7 @@ class Clusters:
                         sub_dir, _ = os.path.split(sub_dir[:-1])
                     else:
                         sub_dir, _ = os.path.split(sub_dir)
+                    #sub_dir = str(sub_dir)
                     fname_measure = os.path.join(sub_dir, "measure.txt")
                     p = mkp.Parser(fname_measure)
                     data = p.get_data()
@@ -94,6 +100,16 @@ class Clusters:
         times = (times - times[0]) / 1000.
         return times
 
+
+    def calc_R(self, xc, yc):
+        """ calculate the distance of each 2D points from the center (xc, yc) """
+        return np.sqrt((self.X-xc)**2 + (self.Y-yc)**2)
+
+    def f_2(self, c):
+        """ calculate the algebraic distance between the data points and the mean circle centered at c=(xc, yc) """
+        Ri = self.calc_R(*c)
+        return Ri - Ri.mean()
+
     def angle_persistence(self, delta_angle=0):
         """
         Analyse a pandas.dataframe to seek
@@ -122,15 +138,18 @@ class Clusters:
 
 
 
-
-    def get_front_params(self, cluster, n_fit=30):
+    def get_front_params(self, cluster, method='polyfit_2', n_fit=30):
         """
         get the parameters of the DW front:
         angles, positions at edges, curvature
         """
-        cnts = self._select_contour(cluster)
         rows, cols = cluster.shape
+        cnts = self._select_contour(cluster)
         X, Y = cnts[:,1], cnts[:,0]
+        if X[0] > X[-1]:
+            X, Y = X[::-1], Y[::-1]
+        y_left, y_right = Y[0], Y[-1]
+        self.X, self.Y = X, Y
         ####################################
         # Left edge
         ####################################
@@ -146,16 +165,9 @@ class Clusters:
         ####################################
         # Curvature, vertex, and deltas
         ####################################
-        a, b, c = np.polyfit(X, Y, 2)
-        r_curvature = -1./a
         straightness = self.get_straightness(cnts)
-        x_v = - b / (2 * a)
-        y_v = - b * b / (4 * a) + c
-        c_right = a * cols * cols + b * cols + c
         row_of_min = np.max(Y) # Yeah, it is correct
-        y_left, y_right = Y[0], Y[-1]
-        if X[0] != 0:
-            y_left, y_right = y_right, y_left
+        r_curvature, x_v, y_v, y_left, y_right = self.get_curvature((X,Y), method=method)
         delta_left = np.abs((y_left) - row_of_min)
         delta_right = np.abs((y_right) - row_of_min)
         l_front = cmet.get_length(cnts)
@@ -168,7 +180,7 @@ class Clusters:
             y_min = y_right
         Delta_S = np.abs(trapz((Y-y_min), X)) - 0.5 * np.abs(y_left - y_right) * cols
         Delta_L = l_front - L_linear
-        params = [angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right]
+        params = [angle_left, angle_right, r_curvature, straightness, x_v, y_v, y_left, y_right]
         params += [delta_left, delta_right, l_front, Delta_L, Delta_S]
         return params
 
@@ -192,7 +204,44 @@ class Clusters:
             y = m*X + c
             return np.mean((Y-y)**2)**0.5
 
-    def get_experiment_stats(self):
+    def get_curvature(self, (X,Y), method='polyfit_2'):
+        """
+        Calculus of the curvature of the DW front
+        """
+        if 'polyfit' in method:
+            n = np.int(method[-1])
+            params = np.polyfit(X, Y, n)
+            p = np.poly1d(params)
+            # Find the curvature for each point
+            p1 = np.polyder(p,1)
+            p2 = np.polyder(p,2)
+            # Find the min (max)
+            crit = p.deriv().r
+            r_crit = crit[crit.imag==0].real
+            x_v = r_crit[0]
+            y_v = p(x_v)
+            y_left, y_right = p(0), p(X[-1])
+            # Choose the curvature at the mimunum
+            r_curvature = (1.+p1(x_v)**2)**1.5/np.abs(p2(x_v))
+            # Gaussian curvature
+            # https://en.wikipedia.org/wiki/Gaussian_curvature
+            K1, K2 = 0,0
+        elif method == 'circlefit':
+            center_estimate = np.mean(X), np.mean(Y)
+            center, ier = optimize.leastsq(self.f_2, center_estimate)
+            xc, yc = center
+            R_i = self.calc_R(*center)
+            r_curvature = R_i.mean()
+            # TODO
+            x_v, y_v = xc, yc + r_curvature 
+            y_left = yc + r_curvature * (1 - (1 - (xc/r_curvature)**2)**0.5)
+            y_right = yc + r_curvature * (1 - (1 - ((X[-1] - xc)/r_curvature)**2)**0.5)
+        else:
+            raise ValueError("Method not implemented")
+        return r_curvature, x_v, y_v, y_left, y_right
+
+
+    def get_experiment_stats(self, curvature_method='polyfit_2'):
         print("Get the statistics for each experiment")
         self.cluster_data = dict()
         self.sub_cluster_data = dict()
@@ -228,11 +277,11 @@ class Clusters:
                 # We need to wait untile the full cluster touches both edges
                 cluster_type = gal.getAxyLabels(cluster, self.direction, 1)[0]
                 if is_not_transient:
-                    front_params = self.get_front_params(cluster)
+                    front_params = self.get_front_params(cluster, method=curvature_method)
                 else:
                     if cluster_type == '1100':
                         is_not_transient = True
-                        front_params = self.get_front_params(cluster)
+                        front_params = self.get_front_params(cluster, method=curvature_method)
                     else:
                         # Use a trick to get the initial front
                         im, n_clusters = mahotas.label(cluster2D==-1, np.ones((3,3)))
@@ -246,8 +295,8 @@ class Clusters:
                             cl_type = gal.getAxyLabels(cl, self.direction, 1)[0]
                             if cl_type == '1101': #Yeah it is correct
                                 self.upper_cluster = np.logical_or(cl, cluster)
-                                front_params = self.get_front_params(self.upper_cluster)
-                angle_left, angle_right, r_curvature, straightness, x_v, y_v, c, c_right = front_params[:8]
+                                front_params = self.get_front_params(self.upper_cluster, method=curvature_method)
+                angle_left, angle_right, r_curvature, straightness, x_v, y_v, y_left, y_right = front_params[:8]
                 delta_left, delta_right, l_front, Delta_L, Delta_S = front_params[8:]
                 # if is_not_transient:
                 #     angle_left, angle_right, r_curvature, x_v, y_v, c, c_right = 7 * [np.NaN]
@@ -270,8 +319,8 @@ class Clusters:
                 cluster_data['straightness'].append(straightness)
                 cluster_data['x_v'].append(x_v)
                 cluster_data['y_v'].append(y_v)
-                cluster_data['c_left'].append(c)
-                cluster_data['c_right'].append(c_right)
+                cluster_data['y_left'].append(y_left)
+                cluster_data['y_right'].append(y_right)
                 cluster_data['delta_left'].append(delta_left)
                 cluster_data['delta_right'].append(delta_right)
                 cluster_data['l_front'].append(l_front)
@@ -310,7 +359,7 @@ class Clusters:
             self.last_switch[n_exp] = last_switch
             cluster_cols = ['n_exp', 'switch_frame', 'switch_time', 'type', 'area', 'n_sub_cl',
                             'a_10', 'a_01', 'r_curv', 'straightness', 'x_v', 'y_v',
-                            'c_left', 'c_right', 'delta_left', 'delta_right',
+                            'y_left', 'y_right', 'delta_left', 'delta_right',
                             'l_front', 'Delta_L', 'Delta_S']
             df = pd.DataFrame.from_dict(cluster_data)
             self.cluster_data[n_exp] = df[cluster_cols]
@@ -572,6 +621,7 @@ if __name__ == "__main__":
     choice = sys.argv[1]
     # As on June 26, this is the example to followcl
     # Added hdf5=True
+    # run mokas_cluster_distributions IEF_old 20um 0.145A 1
     width, set_current, n_wire = sys.argv[2:]
     if choice == 'IEF_old':
         # Example: 
@@ -582,6 +632,7 @@ if __name__ == "__main__":
             print("Check the path")
             sys.exit()
         n_experiments = range(1,11)
+        #n_experiments = range(1,3)
         color = 'red'
         min_size = 5
     elif choice == 'IEF_new':
@@ -610,9 +661,10 @@ if __name__ == "__main__":
 
 
     clusters = Clusters(fname, grp0, n_experiments, skip_first_clusters=0, min_size=min_size)
-    clusters.get_experiment_stats()
+    #clusters.get_experiment_stats(curvature_method='polyfit_4')
+    clusters.get_experiment_stats(curvature_method='circlefit')
     clusters.get_global_stats()
-    clusters.plot_global_stats(color=color)
+    clusters.plot_global_stats(color=color, curvature='radius')
     clusters.plot_cluster_maps(color=color, whiter=0.7, Ncols=10, zoom_in_data=False)
     clusters.plot_area_vs_length()
     ap = clusters.angle_persistence(0)

@@ -24,7 +24,7 @@ import collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
 from mokas_domains import Domains
-import cPickle as pickle
+import pickle
 from skimage import measure
 
 SPACE = "###"
