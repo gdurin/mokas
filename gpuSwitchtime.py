@@ -253,6 +253,8 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
 
 if __name__ == "__main__":
     import time
+    import mokas_gpu as gpu
+    current_dev, ctx, (free, total) = gpu.gpu_init(1)
     # Prepare a 3D array of random data as int32
     dim_x = 650
     dim_y = 650 
@@ -263,7 +265,7 @@ if __name__ == "__main__":
     # Call the GPU kernel
     kernel = np.array([-1]*15+[1]*15)
     t0 = time.time()
-    gpuswitch, gpulevels = get_gpuSwitchTime(a, kernel, device=1)	
+    gpuswitch, gpulevels = get_gpuSwitchTime(a, kernel, current_dev=current_dev, ctx=ctx)	
     timeGpu = time.time() - t0
     # Make the same calculation on the CPU
     step = kernel
@@ -281,3 +283,4 @@ if __name__ == "__main__":
     print("Difference on switch : \n")
     print(gpuswitch-cpuswitch)
     print("\nGPU is %d times faster than CPU " %(timeCpu/timeGpu))
+    gpu.gpu_deinit(current_dev, ctx)

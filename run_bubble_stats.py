@@ -253,25 +253,32 @@ class Clusters:
         return p
 
 
-    def _get_nij(self, _record, df, frac_dim=1, limits=None, distance='arc'):
+    def _get_nij(self, _record, df, frac_dim=1, limits=None, 
+                distance='area', dtheta_min=None):
         """
         find the minumum n_ij for an event j
-        identified by record
+        identified by _record
         and the previous events i
         identified by a sub dataframe 
         (with time < time_j)
         return index and value of the min and the whole n_ij
+        Parameters:
+        =================================
+        limits : tuple
+            max angle and radius from event j 
         distance : str
-            Can be 'euclidean' or 'arc'
+            Can be 'euclidean', 'arc' or
+            'area', as suggested by Alberto and Laura
         """
-        t = _record.switch_time - df.switch_time
+        delta_t = _record.switch_time - df.switch_time
         p = self.p_large_size[df.event_size]
         p = p.values
         X0, Y0 = _record.event_positionX, _record.event_positionY
         X, Y = df.event_positionX, df.event_positionY
         if distance == 'euclidean':
             l = ((X-X0)**2 + (Y-Y0)**2)**0.5
-        elif distance == 'arc':
+            _distance = l**frac_dim 
+        elif distance == 'arc' or distance == 'area':
             n_exp = _record.n_exp.astype(int)
             Xc, Yc = self.centers_of_mass[n_exp]
             x0, y0 = (X0 - Xc), (Y0 - Yc)
@@ -283,25 +290,32 @@ class Clusters:
             Rs = (x*x + y*y)**0.5
             r_s = dthetas * R0
             dR = np.abs(Rs - R0)
-            l = (dR * dR + r_s * r_s)**0.5
-            if limits is not None:
-                angle, pR = limits
-                dR_p = dR / R0 * 100
-                dthetas = dthetas * 180. / np.pi
-                _where = (dR_p <= pR) & (dthetas <= angle)
-                if not np.sum(_where):
-                    return 4 * [None]
-                else:
-                    l = l[_where]
-                    t = t[_where]
-                    p = p[_where]
-        elif distance == 'solidity':
-            pass
-        n_ij = t * l**frac_dim * p
-        t_ij = t * p**0.5
+            if distance == 'arc':
+                l = (dR * dR + r_s * r_s)**0.5
+                if limits is not None:
+                    angle, pR = limits
+                    dR_p = dR / R0 * 100
+                    dthetas = dthetas * 180. / np.pi
+                    _where = (dR_p <= pR) & (dthetas <= angle)
+                    if not np.sum(_where):
+                        return 4 * [None]
+                    else:
+                        l = l[_where]
+                        t = t[_where]
+                        p = p[_where]
+                        _distance = l**frac_dim
+            elif distance == 'area':
+                _distance = 0.5 * (_record.switch_time + df.switch_time) * dthetas
+		#_distance = dthetas * np.abs(R0**2 - Rs**2)
+                if np.min(_distance == 0):
+                    print("Zero distance")
+
+        n_ij = delta_t * _distance * p
+        t_ij = delta_t * p**0.5
         #r_ij = l**frac_dim * p.values**0.5
         #pos = n_ij.values.argmin()
         idxmin_n_ij, min_n_ij = int(n_ij.idxmin()), n_ij.min()
+        #print(min_n_ij)
         t_ij = t_ij[idxmin_n_ij]
         label = df.event_label.loc[idxmin_n_ij]
         if np.isnan(min_n_ij):
@@ -447,24 +461,24 @@ class Clusters:
             ax.yaxis.set_ticks_position('both')
             ax.legend()
             # 2D plot
-            cols = 2
-            fig1, axs = plt.subplots(cols, cols, squeeze=False)
+            #cols = 2
+            #fig1, axs = plt.subplots(cols, cols, squeeze=False)
+            fig1, axs1 = plt.subplots(1,2, figsize=(12,6), sharex=True, sharey=True)
+            #fig2, axs2 = plt.subplots(1,1, figsize=(6,6))
             #ax1.hist2d(r_ij, t_ij, bins=bins)
-            labels = ['real', 'shuffled']
+            lgs = ['real', 'shuffled']
             for i, df in enumerate([self.con_to_df, self.con_to_df_shuffled]):
                 r_ij, t_ij = df['r_ij'], df['t_ij']    
-                axs[i,0].loglog(r_ij, t_ij, 'o', c='C%i' % i, label=labels[i])
-                axs[i,0].legend()
                 x,y = np.log10(r_ij), np.log10(t_ij)
-                axs[i,1].hist2d(x, y, bins=50, norm=colors.LogNorm())
-                if n_ij_max:
-                    X = np.linspace(np.min(x), np.max(x))
-                    Y = -frac_dim * X + np.log10(n_ij_max)
-                    axs[i,1].plot(X,Y,'r--') 
+                X = np.linspace(np.min(r_ij), np.max(r_ij))
+                Y = np.float(n_ij_max) / X 
+                axs1[i].loglog(r_ij, t_ij, 'o', c='C%i' % i, markersize=0.5, label=lgs[i], alpha=0.5)
+                axs1[i].plot(X,Y,'k--', lw=0.75) 
+                axs1[i].legend(markerscale=10)
+                axs1[i].axis((.1,100,0.01,10))
+                axs1[i].set_xlabel(r"$r^{*}$", size=22)
+                axs1[i].set_ylabel(r"$\tau^{*}$", size=22)
 
-                for j in range(cols):
-                    axs[i,j].set_xlabel(r"$r^{*}$", size=26)
-                    axs[i,j].set_ylabel(r"$\tau^{*}$", size=26)
             #ax1.legend()
 	        fig.tight_layout()
 	        fig1.tight_layout()
@@ -968,13 +982,15 @@ if __name__ == "__main__":
         hdf5_filename_results = "Results_NonIrr_Feb2018.hdf5"
         ns_experiments = {"0.137": range(2, 16), "0.146": range(1,9), 
                           "0.157": [2,3,4,5], "0.165": range(1,5)}
-        # ns_experiments = {"0.137": range(2, 16), "0.146": range(1,9), 
+        #ns_experiments = {"0.137": range(2, 5), "0.146": range(1,9), 
         #                   "0.157": [2,3], "0.165": range(1,5)}
         if current_field == "0.137":
-            n_ij_max, _clr = 0.44, 'r'
+            #n_ij_max, _clr = 0.44, 'r' # for linear distance
+            n_ij_max, _clr = 1.2, 'r' # for distances as 'area'
             #nij_list, clrs = [1.44], ['r']
         elif current_field == "0.146":
-            n_ij_max, _clr = 0.33, 'r'
+            #n_ij_max, _clr = 0.33, 'r'
+            n_ij_max, _clr = 1.20, 'r' # for distances as 'area'
             #nij_list, clrs = [1.23], ['r']
         elif current_field == "0.157":
             n_ij_max, _clr = 0.25, 'r'
@@ -1022,6 +1038,7 @@ if __name__ == "__main__":
     # ################################
     #save_data = raw_input("Save dataFrames? ")
     save_data = "Y"
+    #save_data = ""
     if save_data.upper() == 'Y':
         # Save to the upper directory into a hdf5
         distrs = [cl.con_to_df, cl.con_to_df_shuffled]

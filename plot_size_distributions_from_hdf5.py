@@ -40,12 +40,14 @@ def get_best_fit(x, y, y_err, n_params, p0, min_index=2, max_index=-2,):
 
 data = {}
 fields = {"0.137A": "0.13", "0.146A": "0.14", "0.157A": "0.15", "0.165A": "0.16"}
-currents = ["0.137A", "0.146A", "0.157A", "0.165A"]
+#currents = ["0.137A", "0.146A", "0.157A", "0.165A"]
+currents = ["0.137A", "0.146A", "0.157A"]
 n_set = "Set1"
 d_f = "1.000"
 #PS_types = ["events", "nij", "nij_filtered", "touch"]
 #PS_type = PS_types[2]
-nij_s = {"0.137A": "0.44", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.22"}
+#nij_s = {"0.137A": "0.44", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.22"}
+nij_s = {"0.137A": "1.20", "0.146A": "0.33", "0.157A": "0.25"}
 #PS_type = "PS_nij_filtered"
 #PS_type = "P_lenghts"
 PS_type = "PS_nij_filtered"

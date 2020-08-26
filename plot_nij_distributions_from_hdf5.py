@@ -41,15 +41,16 @@ def get_best_fit(x, y, y_err, n_params, p0, min_index=2, max_index=-2,):
 data = {}
 fields = {"0.137A": "0.13", "0.146A": "0.14", "0.157A": "0.15", "0.165A": "0.16"}
 currents = ["0.137A", "0.146A", "0.157A", "0.165A"]
-current = currents[3]
+current = currents[0]
 n_set = "Set1"
 d_f = "1.000"
 #PS_types = ["events", "nij", "nij_filtered", "touch"]
 #PS_type = PS_types[2]
-nij_s = {"0.137A": "0.44", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.19"}
+#nij_s = {"0.137A": "0.44", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.19"}
+nij_s = {"0.137A": "1.20", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.19"}
 #PS_type = "PS_nij_filtered"
 #PS_type = "P_lenghts"
-#hijs = ["h_ij_real", "h_ij_shuffled"]
+h_ij_data = ["h_ij_real", "h_ij_shuffled"]
 hijs = ['all_events_hierarchy', 'all_events_hierarchy_shuffled']
 ac = {"0.137A": .85, "0.146A": .9, "0.157A": 1, "0.165A": 1}
 #nij_s = {"0.137A": "0.44", "0.146A": "0.33", "0.157A": "0.25", "0.165A": "0.19"}
@@ -69,6 +70,7 @@ lgs = ['real', 'shuffled']
 fig, axs = plt.subplots(1,2, figsize=(12,6))
 fig1, axs1 = plt.subplots(1,2, figsize=(12,6), sharex=True, sharey=True)
 fig2, axs2 = plt.subplots(1,1, figsize=(6,6))
+fig3, axs3 = plt.subplots(1,1, figsize=(6,6))
 for i,h_ij in enumerate(hijs):
     n_ij = nij_s[current]
     group = "%s/%s/df_%s/nij_%s/%s" % (current, n_set, d_f, n_ij, h_ij)
@@ -101,17 +103,31 @@ for i,h_ij in enumerate(hijs[::-1]):
     r_ij, t_ij = df['r_ij'], df['t_ij'] 
     lb = "%s mT" % fields[current]
     df = store.get(group)
-    axs2.loglog(r_ij, t_ij, 'o', c='C%i' % (1-i), markersize=0.5, label=lgs[i], alpha=0.8)
+    _color = 'C%i' % (1-i)
+    axs2.loglog(r_ij, t_ij, 'o', c=_color, markersize=0.5, label=lgs[i], alpha=0.8)
     axs2.plot(X,Y,'k--', lw=0.75) 
-    axs2.legend()
-    axs2.axis((.1,100,0.01,10))
-    axs2.set_xlabel(r"$r^{*}$", size=22)
-    axs2.set_ylabel(r"$\tau^{*}$", size=22)
+    # Plot histograms
+    group = "%s/%s/df_%s/nij_%s/%s" % (current, n_set, d_f, n_ij, h_ij_data[i])
+    df = store.get(group)
+    _color = 'C%i' % (i)
+    w = df.index[1] - df.index[0]
+    axs3.bar(df.index, df.values, width=w, color=_color,alpha=0.5, label=lgs[i])
+axs3.axis((-0.1,5,0.,250))
+axs3.set_xlabel(r"$n_{ij}$", size=26)
+axs3.set_ylabel(r"$hist(n_{ij})$", size=26)
+axs3.legend()
+axs2.axis((.1,100,0.01,10))
+axs2.set_xlabel(r"$r^{*}$", size=22)
+axs2.set_ylabel(r"$\tau^{*}$", size=22)
+axs2.legend()
+
 for ax in axs1:
     ax.get_yaxis().set_tick_params(which='both', direction='in')
     ax.get_xaxis().set_tick_params(which='both', direction='in')
     ax.yaxis.set_ticks_position('both')
     ax.xaxis.set_ticks_position('both')
+
+
 
 fig.tight_layout()
 fig1.tight_layout()    
