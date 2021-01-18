@@ -1,4 +1,4 @@
-iimport sys, os
+import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 import visualBarkh as bk
@@ -157,6 +157,7 @@ if __name__ == "__main__":
         #current = "0.146"
         #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
         rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/Set1" % (irradiation,current)
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/Set1" % (irradiation,current)
 	    #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Dec2016/%sA" % (irradiation,current)
         #rootDir = "/home/gf/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/%sA" % (irradiation,current)
         #rootDir = "/data/Meas/Creep/CoFeB/Film/SuperSlowCreep/%s/Feb2018/%sA/No_set" % (irradiation,current)
@@ -179,7 +180,7 @@ if __name__ == "__main__":
             bubble = bubbles.imArray_collector[experiment]
             bubble.waiting_times_map(is_plot=False)
 
-        bubbles.save_hdf5()
+        #bubbles.save_hdf5()
         #bubbles.save_figs()
 
         

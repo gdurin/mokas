@@ -7,7 +7,7 @@ import mokas_gpu as mkGpu
 
 
 def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, 
-    current_dev=None, ctx=None, verbose=False):
+    current_dev=None, ctx=None, block_size=(256,1), verbose=False):
     """
     Return a matrix with the positions of a step in a sequence for each pixel
 
@@ -24,10 +24,13 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     # Convert to int32
     dim_z, dim_y, dim_x = stackImages.shape
     dim_Z, dim_Y, dim_X = np.int32(stackImages.shape)
-    block_X = 256
-    block_Y = 1
+    block_X, block_Y = block_size
     grid_X, grid_Y = dim_x*dim_y*dim_z / block_X if (dim_x*dim_y*dim_z % block_X)==0 else dim_x*dim_y*dim_z / block_X +1 , 1
     grid_X2, grid_Y2 = dim_x / block_X + 1, dim_y/ block_Y + 1
+    grid_X = int(grid_X)
+    grid_Y = int(grid_Y)
+    grid_X2 = int(grid_X2)
+    grid_Y2 = int(grid_Y2)
     if verbose:
         print("Print grid dimensions: ", grid_X, grid_Y)
     convolStack = np.zeros((dim_z , dim_y, dim_x), dtype=np.float32)
@@ -256,8 +259,8 @@ if __name__ == "__main__":
     import mokas_gpu as gpu
     current_dev, ctx, (free, total) = gpu.gpu_init(1)
     # Prepare a 3D array of random data as int32
-    dim_x = 650
-    dim_y = 650 
+    dim_x = 150
+    dim_y = 150 
     dim_z = 80
     a = np.random.randn(dim_z,dim_y,dim_x)
     a = a.astype(np.int32)
@@ -265,7 +268,7 @@ if __name__ == "__main__":
     # Call the GPU kernel
     kernel = np.array([-1]*15+[1]*15)
     t0 = time.time()
-    gpuswitch, gpulevels = get_gpuSwitchTime(a, kernel, current_dev=current_dev, ctx=ctx)	
+    gpuswitch, gpulevels = get_gpuSwitchTime(a, kernel, current_dev=current_dev, ctx=ctx, block_size=(64,4))	
     timeGpu = time.time() - t0
     # Make the same calculation on the CPU
     step = kernel

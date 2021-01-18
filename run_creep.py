@@ -9,6 +9,7 @@ from visualBarkh import StackImages
 import polar
 import iniConnector as iniC
 from mokas_colors import get_colors
+from PyQt5 import QtWidgets
 
 
 def get_rowcols(n):
@@ -79,29 +80,40 @@ class Creep:
 		plt.close("all")
 		self.figs = []
 		self.velocities_mean_error = {}
+		# Get the screen resolution
+		if os.sys.platform == 'linux':
+			app = QtWidgets.QApplication([])
+			screen_resolution = app.primaryScreen().size()
+			width, height = screen_resolution.width(), screen_resolution.height()
+			dpi = app.primaryScreen().physicalDotsPerInch()
+			figsize = width/2/dpi, height/2/dpi
+		else:
+			figsize = None
+			dpi = 100
+		print(width, height)
 		print("Preparing plots",end="")
 		rows, cols = get_rowcols(len(self.Bx_s))
-		self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True) # ColorImages
+		self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True, figsize=figsize, dpi=dpi) # ColorImages
 		self.figs.append(self.fig1)
 		print(".",end="")
-		self.fig2, self.axs2 = plt.subplots(rows,cols) # Histograms
+		self.fig2, self.axs2 = plt.subplots(rows,cols,figsize=figsize, dpi=dpi) # Histograms
 		self.figs.append(self.fig2)
 		print(".",end="")
-		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=True) # Contours
+		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi) # Contours
 		self.figs.append(self.fig3)
-		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=True) # Contours
+		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi) # Contours
 		self.figs.append(self.fig3b)
 		print(".",end="")
-		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True) # Displacements (absolute)
+		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # Displacements (absolute)
 		self.figs.append(self.fig4)
 		print(".",end="")
-		self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True) # Displacements/velocity (relative)
+		self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # Displacements/velocity (relative)
 		self.figs.append(self.fig5)
 		print(".",end="")
 		self.fig6, self.axs6 = plt.subplots(1,2) # Velocity
 		self.figs.append(self.fig6)
 		print(".",end="")
-		self.fig7, self.axs7 = plt.subplots(rows,cols,sharex=True, sharey=True) # velocity (relative)
+		self.fig7, self.axs7 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # velocity (relative)
 		self.figs.append(self.fig7)
 		print("Done")
 
@@ -205,7 +217,7 @@ class Creep:
 		v_err = self.velocities_error
 		v.index = v.index*180/np.pi
 		v_err.index = v_err.index*180/np.pi
-		i_shift = (n_alphas - 1) / 2
+		i_shift = int((n_alphas - 1) / 2)
 		cl = get_colors(i_shift+1,'hue',True)[1:]
 		for i in range(i_shift):
 			col = 0*(i!=0) + 1*(i==0)
@@ -218,7 +230,7 @@ class Creep:
 			self.axs6[i].set_xlabel(r"$B_x$ ({})".format(self.Bx_unit))
 			l1 = self.axs6[i].legend(fontsize=12,title="Angle (deg)",
 				bbox_to_anchor=(-.05, 1), loc=1, borderaxespad=0.)
-			l1.draggable(True)
+			l1.set_draggable(True)
 			
 				
 		limits = np.floor(xmin/100.)*100, np.ceil(xmax/100.)*100, np.ceil(ymax/100.)*100, np.floor(ymin/100.)*100
@@ -232,12 +244,12 @@ class Creep:
 			#ax.set_aspect('equal')
 			l1 = ax.legend(fontsize=12,title=title_Bx,
 				bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-			l1.draggable(True)
+			l1.set_draggable(True)
 
 		ax = self.axs7[rows-1,cols-1]
 		l1 = ax.legend(fontsize=12,title=title_Bx,numpoints=1,
 		 	bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-		l1.draggable(True)
+		l1.set_draggable(True)
 
 		for axs in [self.axs4,self.axs5]:
 			ax = axs[rows-1,cols-1]
@@ -245,7 +257,7 @@ class Creep:
 			ax.set_xlabel("angle (deg)")
 			l1 = ax.legend(fontsize=12,title=title_Bx,ncol=1,
 				bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-			l1.draggable(True)
+			l1.set_draggable(True)
 		self.axs4[rows-1,cols-1].set_title("Last contour")
 		self.axs4[rows-1,cols-1].set_title("Velocity")
 
@@ -268,7 +280,7 @@ class Creep:
 			x,y = c[0]-c[0][0], c[1]-c[1][0]
 			ax.plot(x,y,'-o',label=Bx)
 		l1 = ax.legend()
-		l1.draggable(True)
+		l1.set_draggable(True)
 
 
 def isIniFile(filename):

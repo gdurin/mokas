@@ -204,10 +204,11 @@ class Clusters:
             y = m*X + c
             return np.mean((Y-y)**2)**0.5
 
-    def get_curvature(self, (X,Y), method='polyfit_2'):
+    def get_curvature(self, xy, method='polyfit_2'):
         """
         Calculus of the curvature of the DW front
         """
+        X,Y = xy
         if 'polyfit' in method:
             n = np.int(method[-1])
             params = np.polyfit(X, Y, n)
