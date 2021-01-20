@@ -14,3 +14,5 @@ Dep/
 *.out
 *.log
 
+
+test_gpu
