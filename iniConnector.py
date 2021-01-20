@@ -59,9 +59,10 @@ def to_list_of_tuple(s):
 class IniConnector:
 	def __init__(self, filepath, Bz):
 		self.config = configparser.ConfigParser()
-		self.config.read(filepath)
-		self.default = self.config['DEFAULT']
-		self.__parse_iniFile(Bz)
+		if filepath:
+			self.config.read(filepath)
+			self.default = self.config['DEFAULT']
+			self.__parse_iniFile(Bz)
 
 	def __parse_iniFile(self,Bz):
 		self.imageParameters = {}
@@ -117,11 +118,12 @@ class IniConnector:
 
 class ExperimentalConnector(IniConnector):
 	def __init__(self, filepath, Bz):
-		IniConnector.__init__(self, filepath, Bz)
-		for i,Bx in enumerate(self.Bx_s):
-			label = "%s %s" % (self.Bz_label, self.Bx_s_labels[i])
-			section = self.config[label]
-			self.varsBx[Bx]['pulse_duration'] = to_float(section['pulse_duration'])
+		if filepath:
+			IniConnector.__init__(self, filepath, Bz)
+			for i,Bx in enumerate(self.Bx_s):
+				label = "%s %s" % (self.Bz_label, self.Bx_s_labels[i])
+				section = self.config[label]
+				self.varsBx[Bx]['pulse_duration'] = to_float(section['pulse_duration'])
 
 	@property
 	def Bz_mT(self):
@@ -147,24 +149,24 @@ class SimulationConnector(IniConnector):
 			return 0.1 * self.Bz
 
 
-def connection_factory(filepath, Bz):
+def connection_factory(filepath, Bz, isExperiment=True):
 	basename = os.path.basename(filepath)
-	if "_sim.ini" in basename:
+	if "_sim.ini" in basename or not isExperiment:
 		connector = SimulationConnector
-	elif "_exp.ini" in basename:
+	elif "_exp.ini" in basename or isExperiment:
 		connector = ExperimentalConnector
 	else:
 		raise ValueError('File not found, or the ini file does not end with _sim.ini or _exp.ini')
 	return connector(filepath, Bz)
 
-def connect_to(filepath, Bz):
+def connect_to(filepath, Bz,isExperiment=True):
 	"""
 	Connect to one of the classes (Connectors)
 	for experimental or simulation data
 	"""
 	factory = None
 	try:
-		factory = connection_factory(filepath, Bz)
+		factory = connection_factory(filepath, Bz, isExperiment)
 	except ValueError as ve:
 		print(ve)
 	return factory

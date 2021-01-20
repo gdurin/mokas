@@ -5,8 +5,8 @@ import colorsys
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from visualBarkh import StackImages
-import polar
+from mokas_stackimages import StackImages
+import mokas_polar as polar
 import iniConnector as iniC
 from mokas_colors import get_colors
 from PyQt5 import QtWidgets
@@ -14,7 +14,7 @@ from PyQt5 import QtWidgets
 
 def get_rowcols(n):
 	if n <= 11:
-		return 2, np.int(np.ceil(n/2.))
+		return np.int(np.ceil(n/2.)), 2
 	elif n <=17:
 		return 3, np.int(np.ceil(n/3.))
 	elif n <=23:
@@ -23,37 +23,39 @@ def get_rowcols(n):
 		return 5, np.int(np.ceil(n/5.))
 
 class Creep:
-	def __init__(self, iniFilepath, Bz, gray_threshold=None):
-		print("Reading ini file....",end="");
-		self.rootDir = os.path.dirname(iniFilepath)
-		self.measData = iniC.connect_to(iniFilepath,Bz)
-		self.imParameters = self.measData.imageParameters
-		self.Bz_mT = self.measData.Bz_mT
-		self.full_title = self.measData.material_full + " - " + "$B_z = %i mT$" % self.Bz_mT
-		self.Bx_unit = self.measData.Bx_unit
-		self.step_in_frames = self.measData.step_in_frames
-		self.microns_per_pixel = self.measData.microns_per_pixel
-		self.frame_rate = self.measData.frame_rate
-		if gray_threshold is None:
-			try:
-				self.gray_threshold = self.measData.gray_threshold
-			except:
-				print("Gray level not provided")
-				self.gray_threshold = float(raw_input("gray_threshold?"))
-		# Select the InP fields
-		self.Bx_s = self.measData.Bx_s
-		isProblem = self.check_dirs()
-		if isProblem:
-			print()
-			print("Exiting....")
-			sys.exit()
-		else:
-			# Finish initialization
-			self.all_contours = {}
-			self.all_centers = {}
-			print("Done.")
-			print(self.imParameters)
-	
+	def __init__(self, Bz, iniFilepath="",  gray_threshold=None, colormap=None):
+		self.colormap = colormap
+		if iniFilepath:
+			print("Reading ini file....",end="");
+			self.rootDir = os.path.dirname(iniFilepath)
+			self.measData = iniC.connect_to(iniFilepath,Bz)
+			self.imParameters = self.measData.imageParameters
+			self.Bz_mT = self.measData.Bz_mT
+			self.full_title = self.measData.material_full + " - " + "$B_z = %i mT$" % self.Bz_mT
+			self.Bx_unit = self.measData.Bx_unit
+			self.step_in_frames = self.measData.step_in_frames
+			self.microns_per_pixel = self.measData.microns_per_pixel
+			self.frame_rate = self.measData.frame_rate
+			if gray_threshold is None:
+				try:
+					self.gray_threshold = self.measData.gray_threshold
+				except:
+					print("Gray level not provided")
+					self.gray_threshold = float(raw_input("gray_threshold?"))
+			# Select the InP fields
+			self.Bx_s = self.measData.Bx_s
+			isProblem = self.check_dirs()
+			if isProblem:
+				print()
+				print("Exiting....")
+				sys.exit()
+			else:
+				# Finish initialization
+				self.all_contours = {}
+				self.all_centers = {}
+				print("Done.")
+				print(self.imParameters)
+		
 	def check_dirs(self):	
 		# Need to check now that all the files exist:
 		isProblem = False
@@ -67,11 +69,14 @@ class Creep:
 				print(".",end="")
 	
 	def get_color_sequence(self):
-		colormap = plt.cm.gist_ncar
+		if not self.colormap:
+			colormap = plt.cm.gist_ncar
+		else:
+			colormap = self.colormap
 		colors = [colormap(i) for i in np.linspace(0, 0.9, len(self.Bx_s))]
 		return colors
 	
-	def plot_results(self):
+	def plot_results(self, isPlot=True):
 		"""
 		Plot the different images for creep calculation
 		"""
@@ -93,29 +98,32 @@ class Creep:
 		print(width, height)
 		print("Preparing plots",end="")
 		rows, cols = get_rowcols(len(self.Bx_s))
-		self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True, figsize=figsize, dpi=dpi) # ColorImages
+		self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True, figsize=figsize, dpi=dpi, squeeze=False) # ColorImages
 		self.figs.append(self.fig1)
 		print(".",end="")
-		self.fig2, self.axs2 = plt.subplots(rows,cols,figsize=figsize, dpi=dpi) # Histograms
+		self.fig2, self.axs2 = plt.subplots(rows,cols,figsize=figsize,dpi=dpi,squeeze=False) # Histograms
 		self.figs.append(self.fig2)
 		print(".",end="")
-		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi) # Contours
+		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
 		self.figs.append(self.fig3)
-		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi) # Contours
+		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
 		self.figs.append(self.fig3b)
 		print(".",end="")
-		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # Displacements (absolute)
+		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements (absolute)
 		self.figs.append(self.fig4)
 		print(".",end="")
-		self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # Displacements/velocity (relative)
+		self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements/velocity (relative)
 		self.figs.append(self.fig5)
 		print(".",end="")
 		self.fig6, self.axs6 = plt.subplots(1,2) # Velocity
 		self.figs.append(self.fig6)
 		print(".",end="")
-		self.fig7, self.axs7 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi) # velocity (relative)
+		self.fig7, self.axs7 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # velocity (relative)
 		self.figs.append(self.fig7)
 		print("Done")
+		# Close the figures
+		for fig in self.figs:
+			plt.close(fig.number)
 
 		colors = self.get_color_sequence()
 
@@ -140,8 +148,8 @@ class Creep:
 			# Plot the subplots
 			if n==0:
 				nImages = ((self.imParameters['lastIm'] - self.imParameters['firstIm'])*5)
-				pColor = get_colors(nImages,'pastel',norm=True)
-
+				#pColor = get_colors(nImages,'pastel',norm=True)
+				pColor = get_colors(nImages,self.colormap,norm=True)
 
 			i, j = np.int(np.floor(n/cols)), n%cols
 			# Figure 1 : color Image of DW motion
@@ -153,9 +161,12 @@ class Creep:
 			
 			# Calculate the contours
 			imArray.find_contours(lines_color='k',remove_bordering=True,
-				plot_centers_of_mass=True, fig=self.fig3,ax=self.axs3[i,j],title=title)
+				plot_centers_of_mass=True, fig=self.fig3,ax=self.axs3[i,j])
 			imArray.find_contours(remove_bordering=True,reference='center_of_mass',rescale_area=True,
-				fig=self.fig3b,ax=self.axs3b[i,j],title=title)
+				fig=self.fig3b,ax=self.axs3b[i,j])
+
+			self.axs3[i,j].set_title(title, fontdict={'fontsize': 'medium'})
+			self.axs3b[i,j].set_title(title, fontdict={'fontsize': 'medium'})
 
 			self.all_contours[Bx] = imArray.contours
 			self.all_centers[Bx] = imArray.centers_of_mass
@@ -163,8 +174,8 @@ class Creep:
 
 			#Plot the central domain
 			cnts0 = imArray.contours[0]
-			self.axs1[rows-1,cols-1].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=1)
-			self.axs3[rows-1,cols-1].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=.5)
+			#self.axs1[i,j].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=1)
+			#self.axs3[i,j].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=.5)
 
 			#Plot the external contour
 			lastKey = sorted(imArray.contours.keys())[-1]
@@ -177,19 +188,19 @@ class Creep:
 			if Ymax > ymax: ymax = Ymax
 			if Xmin < xmin: xmin = Xmin
 			if Ymin < ymin: ymin = Ymin
-			if int(Bx) == Bx:
+			if int(Bx) == Bx:	
 				label = int(Bx)
 			else:
 				label = Bx
 			for ax in [self.axs1,self.axs3]:
-				ax[rows-1,cols-1].plot(xcnts,ycnts,c=colors[n],lw=1,label=label)
+				ax[i,j].plot(xcnts,ycnts,c=colors[n],lw=1,label=label)
 
 			# Plot dispacements in polar coordinates from the center
 			theta, r, frames = polar.plot_displacement(imArray.contours,origin=center,reference='center',
 				swope_xy=True,fig=self.fig4,ax=self.axs4[i,j],title=title,step_in_frames=self.step_in_frames)
 			
 			# plot last contours
-			self.axs4[rows-1,cols-1].plot(theta/np.pi*180,r,c=colors[n],lw=2,label=label)
+			#self.axs4[rows-1,cols-1].plot(theta/np.pi*180,r,c=colors[n],lw=2,label=label)
 			self.axs4[i,j].plot(theta/np.pi*180,r,c=colors[n],lw=2)
 			
 			# Plot dispacements in polar coordinates from the nucleated domain
@@ -262,9 +273,10 @@ class Creep:
 		self.axs4[rows-1,cols-1].set_title("Velocity")
 
 		for fig in self.figs:
-			fig.suptitle(self.full_title,fontsize=30)
+			fig.suptitle(self.full_title,fontsize='xx-large')
 
-		plt.show()
+		if isPlot:
+			plt.show()
 
 	def plot_trajectories_centers_of_mass(self,range_Bx=None):
 		fig = plt.figure()
@@ -324,5 +336,5 @@ if __name__ == "__main__":
 		print("There is a problem with the ini file {}: file not found".format(iniFilepath))
 		sys.exit()
 
-	creep_data = Creep(iniFilepath, Bz)
+	creep_data = Creep(Bz, iniFilepath)
 	creep_data.plot_results()

@@ -5,8 +5,7 @@ Created on Thu Oct  6 17:06:23 2011
 @author: gf
 """
 import os
-import visualBarkh as vB
-reload(vB)
+import mokas_stackimages as msi
 
 if __name__ == "__main__":
     #mainDir = "/home/gf/meas/Barkh/Films/CoFe/50nm/run2/"
@@ -43,13 +42,17 @@ if __name__ == "__main__":
     #runNo, firstImage, lastImage = "run1", 575, 1060
     
     mainDir = os.path.join(rootDir, magnification, runNo)
+    mainDir = "/home/gf/Meas/Creep/PtCoPt/M2/PtCoPt_2-2c-0d-100nOe-0.657V-30.0s_18"
+    subDirs = [mainDir, "", "", "", ""]
+    firstImage, lastImage = 1, 89
     filtering = 'gauss'
     sigma = 1.5
     pattern = "Data1-*.tif"
-
-    
-    imArray = vB.StackImages(mainDir,pattern, filtering=filtering, sigma=sigma,\
-                             firstImage=firstImage, lastImage=lastImage)
+    pattern = "filename*.png"
+    imCrop = [(160,80),(520,400)]
+    gray_threshold = 25
+    imArray = msi.StackImages(subDirs,pattern, filtering=filtering, sigma=sigma,\
+                             firstIm=firstImage, lastIm=lastImage, imCrop=imCrop)
 
     imArray.width='small'
     imArray.useKernel = 'step'

@@ -1,7 +1,7 @@
 import sys, glob
 import numpy as np
 import matplotlib.pyplot as plt
-import visualBarkh as bk
+import mokas_stackimages as msi
 
 p2p = 3 # Pixel to pixel (linear) distance for cluster detection
 NN = 2*p2p + 1
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         imParameters['pattern'] = "%s_irradiatedFilm_%sA_10fps_MMStack_Pos0.ome.tif" % (directory[:2], current)
 
     
-        imArray = bk.StackImages(**imParameters)
+        imArray = msi.StackImages(**imParameters)
         imArray.width='all'
         imArray.useKernel = 'both'
         imArray.kernelSign = -1

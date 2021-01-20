@@ -75,7 +75,8 @@ def get_colors(num_colors, palette='hue', norm=False):
         colors = np.random.permutation(colors)
     elif palette == 'pastel':
         colors = (np.random.randint(0, 256, (num_colors,3)) + white) / 2
-        #colors = get_cmap(num_colors)
+    else:
+        colors = get_cmap(num_colors, palette)
     colors = np.vstack((black,colors))
     if norm:
         colors = colors/255.

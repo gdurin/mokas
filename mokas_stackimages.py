@@ -19,7 +19,7 @@ import rof
 import mahotas
 #import h5py
 import tables
-import polar
+import mokas_polar as polar
 import collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
@@ -788,11 +788,16 @@ class StackImages:
         #ax.pcolormesh(data,cmap=colorMap,norm=self.norm)
         ax.imshow(data, cmap=colorMap, norm=self.norm)
         ax.axis(extent)
+        for tick in ax.xaxis.get_major_ticks():
+            tick.label.set_fontsize('xx-small') 
+        for tick in ax.yaxis.get_major_ticks():
+            tick.label.set_fontsize('xx-small') 
+        
         if title is None:
             first, last = self.imagesRange
             #title = "DW motion from image %i to image %i" % (first, last)
             title = self.pattern
-        ax.title.set_text(title)
+        ax.set_title(title, fontsize='xx-small')
         cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
         return fig
 
@@ -815,11 +820,11 @@ class StackImages:
             ax = plt.gca()
         self.N_hist, self.bins_hist, patches = ax.hist(data, rng)       
         ax.format_coord =  lambda x,y : "image Number: %i, avalanche size (pixels): %i" % (int(x+0.5), int(y+0.5))
-        ax.set_xlabel("image number")
+        ax.set_xlabel("image number",fontsize='xx-small')
         if title:
-            ax.set_title(title)
+            ax.set_title(title, fontsize='xx-small')
         if ylabel:
-           ax.set_ylabel(ylabel)
+           ax.set_ylabel(ylabel, fontsize='xx-small')
         ax.set_xlim(0, ax.get_xlim()[1])
         # Set the colors
         for thisfrac, thispatch in zip(central_points, patches):

@@ -2,7 +2,7 @@ import sys, os
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from visualBarkh import StackImages
+from mokas_stackimages import StackImages
 import mahotas
 from skimage import measure
 import getLogDistributions as gLD

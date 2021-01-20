@@ -103,10 +103,12 @@ def plot_mean_velocity(x,v_mean,v_err,fig=None,ax=None,title=None,label=None,col
 	#ax.plot(v.columns*180/np.pi,v_mean,'o')
 	ax.errorbar(to_degree(x),v_mean,v_err,fmt='o',c=color,label=label)
 	ax.grid(True)
-	ax.set_xlabel("angle (deg)")
-	ax.set_xticks(np.arange(-4,5)*45)
-	ax.set_ylabel("average velocity")
-	ax.set_title(title)
+	ax.set_xlabel("angle (deg)", fontsize='xx-small')
+	ax.set_xticks(np.arange(-2,3)*90)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize('xx-small') 
+	ax.set_ylabel("average velocity", fontsize='xx-small')
+	ax.set_title(title, fontsize='xx-small')
 	return
 
 
@@ -160,13 +162,15 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 
 
 	ax.grid(True)
-	ax.set_xlabel("angle (deg)")
-	ax.set_xticks(np.arange(-4,5)*45)
-	if reference=='nucleated_domain':
-		ax.set_ylabel("distance from the nucleated domain")
+	ax.set_xlabel("angle (deg)", fontsize='xx-small')
+	ax.set_xticks(np.arange(-2,3)*90)
+	for tick in ax.xaxis.get_major_ticks():
+		tick.label.set_fontsize('xx-small') 
+	if reference == 'nucleated_domain':
+		ax.set_ylabel("distance from the nucleated domain", fontsize='xx-small')
 	else:
-		ax.set_ylabel("distance from the center")
-	ax.set_title(title)
+		ax.set_ylabel("distance from the center", fontsize='xx-small')
+	ax.set_title(title, fontsize='xx-small')
 	# return the last contour
 	# and the n. of frames between the first and the last switches
 	frames = switches[-1] - switches[1] + 1

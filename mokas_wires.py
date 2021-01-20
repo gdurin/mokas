@@ -3,7 +3,7 @@ import math
 import configparser
 import numpy as np
 import matplotlib.pyplot as plt
-from visualBarkh import StackImages
+from mokas_stackimages import StackImages
 import mahotas
 import skimage.morphology as morph
 import skimage.feature as feature
