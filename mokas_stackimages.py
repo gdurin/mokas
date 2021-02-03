@@ -27,6 +27,18 @@ from mokas_domains import Domains
 import pickle
 from skimage import measure
 
+try:
+    #from bokeh.models import (BasicTicker, Circle, ColumnDataSource, DataRange1d,
+    #                      Grid, LinearAxis, PanTool, Plot, WheelZoomTool,)
+    import bokeh.models as bkm
+    import bokeh.plotting as plk
+    from bokeh.models.annotations import Title
+    import bokeh.palettes as palettes
+    from bokeh.transform import factor_cmap, linear_cmap
+    is_bokeh = True
+except:
+    is_bokeh = False
+
 SPACE = "###"
 
 # Check if pycuda is available
@@ -129,13 +141,17 @@ class StackImages:
     hdf5_signature : dict
         A dictionary containing the essential data to identify a measurement
         if None, the code does not save data on a hdf5
+
+    visualization_library : str
+        'mpl': matplotlib (default)
+        'bokeh' : Bokeh (https://docs.bokeh.org/en/latest/index.html)
     """
 
     def __init__(self, subDirs, pattern, resize_factor=None,
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 10, 
-                 #kernel_internal_points = 0,
+                 #kernel_sign = -1,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
@@ -144,7 +160,8 @@ class StackImages:
                  erase_small_events_percent = None,
                  rotation=None, fillValue=-1, 
                  hdf5_use=False, 
-                 hdf5_signature=None):
+                 hdf5_signature=None,
+                 visualization_library = 'mpl'):
         """
         Initialized the class
         """
@@ -170,7 +187,7 @@ class StackImages:
         self.imagesRange = (firstIm, lastIm)
         self.imageDir = None
         self.initial_domain_region = initial_domain_region
-        self.is_find_contours = False
+        self.is_plotContours = False
         self.isTwoImages = False
         self.is_minmax_switches = False
         self.pattern = pattern
@@ -186,7 +203,11 @@ class StackImages:
         # Variables for image analysis
         self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
         self.erase_small_events_percent = erase_small_events_percent
+        self.visualization_library = visualization_library
 
+        (x0, y0), (x1, y1) = imCrop
+        self.imWidth, self.imHeight = (x1-x0), (y1 -y0) 
+        
         # Check paths
         if not os.path.isdir(self._mainDir):
             print("Please check you dir %s" % self._mainDir)
@@ -210,6 +231,7 @@ class StackImages:
         self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
+        self.visualization_library = visualization_library
         
 
     def _get_multiplier(self, method='average_gray'):
@@ -640,9 +662,17 @@ class StackImages:
         self._nImagesWithSwitch = self.max_switch - self.min_switch + 1
         print("Gray changes are between %s and %s" % (min(self._switchSteps), max(self._switchSteps)))
 
-        # Calculate the colours, considering the range of the switch values obtained
-        self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
-        self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
+        if self.visualization_library == 'mpl':
+            # Calculate the colours, considering the range of the switch values obtained
+            self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
+            self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
+        elif self.visualization_library == 'bokeh':
+            name, number = palette.split("_")
+            number = int(number)
+            background_color = mpl.colors.to_hex(noSwitchColor)
+            p = [background_color] + list(palettes.all_palettes[name][number])
+            self._colorMap = tuple(p)
+
         central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
         # Calculate the switch time Array (2D) considering the threshold and the start from zero
         self._switchTimes2D = self._getSwitchTimesOverThreshold(False, self.fillValue).reshape(self.dimX, self.dimY)
@@ -735,7 +765,7 @@ class StackImages:
         if plot_contours:
             if ax is None:
                 ax = fig.gca()
-            self.find_contours(lines_color='k', remove_bordering=True, invert_y_axis=False, fig=fig, ax=ax)
+            self.plotContours(lines_color='k', remove_bordering=True, invert_y_axis=False, fig=fig, ax=ax)
         if plotHist:
             # Plot the histogram
             self.plotHistogram(self._switchTimesOverThreshold, ylabel="Avalanche size (pixels)")
@@ -747,6 +777,7 @@ class StackImages:
                    noSwitchPixels, noSwitchPixels/float(totNumPixels)*100.)
         print("There are %d (%.2f %%) switched and %d (%.2f %%) not-switched pixels" % swPrint)
         plt.show()
+        return fig
 
     def _call_pixel_switch(self, p0, p1):
         x, y = self._pixel2rowcol((p0,p1), closest_integer=True) 
@@ -765,73 +796,120 @@ class StackImages:
             self.showPixelTimeSequence(pixel, newPlot=True)
             #plt.show()
 
-    def _plotColorImage(self, data, colorMap, fig=None, ax=None, title=None, figsize=(8,7)):
+    def _plotColorImage(self, data, colorMap, fig=None, ax=None, title=None, figsize=(8,7),
+                        xax=False, yax=False):
         """
         if the caption is not shown, just enlarge the image
         as it depends on the length of the string retured by
         _call_pixel_switch
         """
-        if not fig:
-            fig = plt.figure()
-            fig.set_size_inches(*figsize, forward=True)
-            ax = fig.add_subplot(1, 1, 1)
-        else:
-            fig = plt.figure(fig.number)
-            if ax is None:
-                ax = fig.gca()
-        ax.format_coord = lambda p0, p1: self._call_pixel_switch(p0, p1)
         # Sets the limits of the image
         extent = 0, self.dimY, self.dimX, 0
         bounds = np.unique(data)
         bounds = np.append(bounds, bounds[-1]+1)-0.5
         self.norm = mpl.colors.BoundaryNorm(bounds, len(bounds)-1)
-        #ax.pcolormesh(data,cmap=colorMap,norm=self.norm)
-        ax.imshow(data, cmap=colorMap, norm=self.norm)
-        ax.axis(extent)
-        for tick in ax.xaxis.get_major_ticks():
-            tick.label.set_fontsize('xx-small') 
-        for tick in ax.yaxis.get_major_ticks():
-            tick.label.set_fontsize('xx-small') 
-        
-        if title is None:
-            first, last = self.imagesRange
-            #title = "DW motion from image %i to image %i" % (first, last)
-            title = self.pattern
-        ax.set_title(title, fontsize='xx-small')
-        cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
+        if self.visualization_library == 'mpl':
+            if not fig:
+                fig = plt.figure()
+                fig.set_size_inches(*figsize, forward=True)
+                ax = fig.add_subplot(1, 1, 1)
+            else:
+                fig = plt.figure(fig.number)
+                if ax is None:
+                    ax = fig.gca()
+            ax.format_coord = lambda p0, p1: self._call_pixel_switch(p0, p1)
+
+            #ax.pcolormesh(data,cmap=colorMap,norm=self.norm)
+            ax.imshow(data, cmap=colorMap, norm=self.norm)
+            ax.axis(extent)
+            for tick in ax.xaxis.get_major_ticks():
+                tick.label.set_fontsize('xx-small') 
+            for tick in ax.yaxis.get_major_ticks():
+                tick.label.set_fontsize('xx-small') 
+            
+            if title is None:
+                first, last = self.imagesRange
+                #title = "DW motion from image %i to image %i" % (first, last)
+                title = self.pattern
+            ax.set_title(title, fontsize='xx-small')
+            cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
+        elif self.visualization_library == 'bokeh':
+            if not fig:
+                fig = plk.figure(tooltips=[("x", "$x"), ("y", "$y"), ("switch", "@image")], match_aspect=True,
+                                plot_width=self.dimY, plot_height=self.dimX, tools='pan,box_zoom,reset',
+                                title=title, title_location='above')
+                fig.x_range.range_padding = fig.y_range.range_padding = 0
+                fig.renderers = []
+            fig.image(image=[np.flipud(data)],  x=0, y=0, dw=self.dimY, dh=self.dimX, palette=colorMap)
+            xticker = bkm.BasicTicker()
+            if xax:
+                xaxis = bkm.LinearAxis()
+                #xaxis.axis_label = xname
+                fig.add_layout(xaxis, 'below')
+                xticker = xaxis.ticker
+            fig.add_layout(bkm.Grid(dimension=0, ticker=xticker))
+
+            yticker = bkm.BasicTicker()
+            if yax:
+                yaxis = bkm.LinearAxis()
+                #yaxis.axis_label = yname
+                yaxis.major_label_orientation = 'vertical'
+                fig.add_layout(yaxis, 'left')
+                yticker = yaxis.ticker
+            fig.add_layout(bkm.Grid(dimension=1, ticker=yticker))
+
+
+            #fig.add_tools(bkm.PanTool(), bkm.WheelZoomTool(), bkm.BoxSelectTool(), bkm.BoxZoomTool(),
+            #      bkm.LassoSelectTool(), bkm.PanTool(), bkm.WheelZoomTool(), bkm.SaveTool(), bkm.ResetTool())
+            #fig.add_tools(bkm.BoxSelectTool(), bkm.ResetTool())
+            #print(fig)
+            
         return fig
 
-    def plotHistogram(self, data, fig=None, ax=None, title=None, ylabel=None):
+    def plotHistogram(self, data, palette='random', fig=None, ax=None, title=None, ylabel=None):
         #image_numbers = np.unique(data)
         #i0, i1 = image_numbers[0], image_numbers[-1] + 1
         #central_points = np.arange(i0, i1)
         central_points = self.imageNumbers
         rng = np.append(central_points, central_points[-1] + 1) - 0.5
-        if fig:
-            plt.figure(fig.number)
-            if ax is None:
-                ax = plt.gca()
-        else:
-            if self._figHistogram is None:
-                self._figHistogram = plt.figure()
+        if self.visualization_library == 'mpl':
+            if fig:
+                plt.figure(fig.number)
+                if ax is None:
+                    ax = plt.gca()
             else:
-                plt.figure(self._figHistogram.number)
-                plt.clf()
-            ax = plt.gca()
-        self.N_hist, self.bins_hist, patches = ax.hist(data, rng)       
-        ax.format_coord =  lambda x,y : "image Number: %i, avalanche size (pixels): %i" % (int(x+0.5), int(y+0.5))
-        ax.set_xlabel("image number",fontsize='xx-small')
-        if title:
-            ax.set_title(title, fontsize='xx-small')
-        if ylabel:
-           ax.set_ylabel(ylabel, fontsize='xx-small')
-        ax.set_xlim(0, ax.get_xlim()[1])
-        # Set the colors
-        for thisfrac, thispatch in zip(central_points, patches):
-            c = self._colorMap(self.norm(thisfrac))
-            thispatch.set_facecolor(c)
-        self.is_histogram = True
-        return None
+                if self._figHistogram is None:
+                    self._figHistogram = plt.figure()
+                else:
+                    plt.figure(self._figHistogram.number)
+                    plt.clf()
+                ax = plt.gca()
+            self.N_hist, self.bins_hist, patches = ax.hist(data, rng)       
+            ax.format_coord =  lambda x,y : "image Number: %i, avalanche size (pixels): %i" % (int(x+0.5), int(y+0.5))
+            ax.set_xlabel("image number",fontsize='xx-small')
+            if title:
+                ax.set_title(title, fontsize='xx-small')
+            if ylabel:
+               ax.set_ylabel(ylabel, fontsize='xx-small')
+            ax.set_xlim(0, ax.get_xlim()[1])
+            # Set the colors
+            for thisfrac, thispatch in zip(central_points, patches):
+                c = self._colorMap(self.norm(thisfrac))
+                thispatch.set_facecolor(c)
+            self.is_histogram = True
+        elif self.visualization_library == 'bokeh':
+            hist, edges = np.histogram(data, bins=rng, density=True)
+            #fill_color = [self._colorMap(self.norm(c)) for c in central_points]
+            fig = plk.figure(title=title, tools='', background_fill_color="#fafafa")
+            #mapper = linear_cmap(field_name='edges', palette=palette ,low=edges[1],high=edges[-1])
+            
+            fig.quad(top=hist,bottom=0, left=edges[:-1], right=edges[1:],
+                    #fill_color=fill_color, 
+                    #fill_color = self._colorMap,
+                    line_color="white", alpha=1)
+            fig.y_range.start = 0
+            fig.grid.grid_line_color = 'white'
+        return fig
 
 
     def saveColorImage(self,fileName,threshold=None, palette='random',noSwitchColor='black'):
@@ -1031,7 +1109,7 @@ class StackImages:
         show the Raw and the Calculated image n
         Automatically increases the values of the image
         pressing "n" (next) or "p" (previous)
-        Uses the measure.find_contours script
+        Uses the measure.plotContours script
 
         Parameters
         ---------------
@@ -1334,7 +1412,7 @@ class StackImages:
             return
         while True:
             imageNumber = raw_input("Number of the image to join with its next (Return to exit): ")
-            if imageNumber is not "":
+            if not imageNumber:
                 imageNumber = int(imageNumber)
                 self.ghostbusters(0, True, imageNumber)
             else:
@@ -1640,10 +1718,12 @@ class StackImages:
             i = np.argmax(l)
             return cnts[i]
 
-    def find_contours(self, lines_color=None, invert_y_axis=True, step_image=1,
+    def plotContours(self, lines_color=None,  
+                        invert_y_axis=True, step_image=1,
                         consider_events_around_a_central_domain=True,
                         initial_domain_region=None, remove_bordering=False,
-                        plot_centers_of_mass = False, reference=None,
+                        plot_centers_of_mass = False, 
+                        color_center_of_mass='k', reference=None,
                         rescale_area=False, plot_rays=False,
                         fig=None, ax=None, title=None):
         """
@@ -1662,13 +1742,17 @@ class StackImages:
         reference : str
             None or 'center_of_mass'
         """
-        if fig is None:
-            fig = plt.figure(figsize=self._figColorImage.get_size_inches())
-            ax = fig.gca()
-        else:
-            plt.figure(fig.number)
-            if ax is None:
+        if self.visualization_library == 'mpl':
+            if fig is None:
+                fig = plt.figure(figsize=self._figColorImage.get_size_inches())
                 ax = fig.gca()
+            else:
+                plt.figure(fig.number)
+                if ax is None:
+                    ax = fig.gca()
+        elif self.visualization_library == 'bokeh':
+            fig = plk.figure(title=title)
+        # Initialization
         self.contours = {}
         self.bubbles = {}
         self.centers_of_mass = {}
@@ -1692,12 +1776,23 @@ class StackImages:
         # Plot the center of mass of the nucleated domain
         if reference == 'center_of_mass':
             X, Y = (X - xc) / scaling, (Y - yc) / scaling
-            ax.plot(0, 0, 'o', color=lines_color)
+            _x, _y = 0, 0
         else:
             X, Y = X / scaling, Y / scaling
-            ax.plot(xc, yc, 'o', color=lines_color)
+            _x, _y = xc, yc
+
         # The nucleated domain is always black
-        ax.plot(X, Y, 'k', antialiased=True, lw=2)
+        if self.visualization_library == 'mpl':
+            ax.plot(_x, _y, 'o', color=color_center_of_mass)
+            ax.plot(X, Y, 'k', antialiased=True, lw=2)
+        elif self.visualization_library == 'bokeh':
+            if invert_y_axis:
+                _y = self.imHeight - _y
+                Y = self.imHeight - Y
+            fig.circle(_x, _y, size=12, color=color_center_of_mass)
+            fig.line(X, Y, line_width=2)
+
+        
         self.sw = self.domain.sw[:self.domain.max_switch]
         for k, switch in enumerate(self.sw):
             #print(switch)
@@ -1743,14 +1838,18 @@ class StackImages:
             y,x = nd.measurements.center_of_mass(central_domain)
             self.bubbles[switch] = central_domain
             self.centers_of_mass[switch] = (y, x)
-            n_images = len(self.sw)
-            n = float(switch - self.sw[0])
-            clr = getKoreanColors(n, n_images)
-            #print(n, clr)
-            clr = tuple([c / 255. for c in clr])
+            # n_images = len(self.sw)
+            # n = float(switch - self.sw[0])
+            # clr = getKoreanColors(n, n_images)
+            # #print(n, clr)
+            # clr = tuple([c / 255. for c in clr])
             if plot_centers_of_mass and reference is None:
-                ax.plot(x,y,'o',c=clr)
-            #plt.plot(x,y,'o')
+                if self.visualization_library == 'mpl':
+                    ax.plot(x, y, 'o', c=color_center_of_mass)
+                elif self.visualization_library == 'bokeh':
+                    if invert_y_axis:
+                        y = self.imHeight - y
+                    fig.circle(x, y, size=12, color=color_center_of_mass)
             try:
                 #cnts = measure.find_contours(central_domain*1,.5, 'high')[0]
                 cnts = self._get_contours(central_domain, longest=True)
@@ -1773,32 +1872,51 @@ class StackImages:
                 else:
                     X, Y = X/scaling, Y/scaling
                 if lines_color is not None:
-                    ax.plot(X,Y,lines_color,antialiased=True,lw=lw)
+                    _lines_color = lines_color
                 else:
-                    ax.plot(X,Y,c=clr,antialiased=True,lw=lw)
+                    _lines_color = clr
+                if self.visualization_library == 'mpl':
+                    ax.plot(X,Y,_lines_color,antialiased=True,lw=lw)
+                elif self.visualization_library == 'bokeh':
+                    if invert_y_axis:
+                        Y = self.imHeight - Y
+                    fig.line(X,Y,color='black', line_width=lw)
+
+
         if plot_rays:
             # Plot the refence lines
             alpha = np.pi/10
             #ax.axis(axs)
             if reference == 'center_of_mass':
                 axs = (-xc/scaling,(self.dimY-xc)/scaling,(self.dimX-yc)/scaling,-yc/scaling)
-                polar.plot_rays(center=(0,0),step_angle=alpha,ax=ax,axis_limits=axs)    
+                data = polar.get_rays(center=(0,0),step_angle=alpha, axis_limits=axs)
+                #polar.plot_rays(center=(0,0),step_angle=alpha,ax=ax,axis_limits=axs)    
             else:
                 axs = (0,self.dimY/scaling,self.dimX/scaling,0)
-                polar.plot_rays(center=(xc,yc),step_angle=alpha,ax=ax,axis_limits=axs)
-        if invert_y_axis:
-            ax.invert_yaxis()
+                data = polar.get_rays(center=(xc,yc),step_angle=alpha, axis_limits=axs)
+                #polar.plot_rays(center=(xc,yc),step_angle=alpha,ax=ax,axis_limits=axs)
+            for m in data:
+                X, Y = data[m]
+                if self.visualization_library == 'mpl':                    
+                    ax.plot(X,Y,'k--', lw=0.5)
+                elif self.visualization_library == 'bokeh':
+                    fig.dash(X,Y,color='black', line_width=0.5)
+            xmin, xmax, ymax, ymin = axs
+
+        if self.visualization_library == 'mpl': 
+            if invert_y_axis:
+                ax.invert_yaxis()
             #ax.set_aspect('equal')
-        if title:
-            ax.set_title(title)
-        ax.axis('equal')
-        plt.show()
-        self.is_find_contours = True
-        return
+            if title:
+                ax.set_title(title, fontdict={'fontsize': 'medium'})
+            ax.axis('equal')
+            plt.show()
+        self.is_plotContours = True
+        return fig
         
     def rescale_contours(self,invert_y_axis=True,fig=None,ax=None):
-        if not self.is_find_contours:
-            print("Please, run find_contours first")
+        if not self.is_plotContours:
+            print("Please, run plotContours first")
             return
         if fig is None:
             fig = plt.figure(figsize=self._figColorImage.get_size_inches())
@@ -1863,8 +1981,8 @@ class StackImages:
         calculate and plot the waiting time matrix
         """
         from matplotlib.colors import LogNorm
-        if not self.is_find_contours:
-            print("You have to run find_contours first")
+        if not self.is_plotContours:
+            print("You have to run plotContours first")
         x_points = np.array([])
         y_points = np.array([])
         # Collect the x and y of the contours

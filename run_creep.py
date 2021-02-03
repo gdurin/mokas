@@ -4,7 +4,13 @@ import configparser
 import colorsys
 import numpy as np
 import matplotlib.pyplot as plt
+from bokeh.plotting import figure
+import bokeh.models as bkm
+from bokeh.layouts import gridplot
+import bokeh.palettes as palettes
+import mokas_bokeh as mkb
 import pandas as pd
+
 from mokas_stackimages import StackImages
 import mokas_polar as polar
 import iniConnector as iniC
@@ -12,19 +18,19 @@ from mokas_colors import get_colors
 from PyQt5 import QtWidgets
 
 
+
 def get_rowcols(n):
 	if n <= 11:
 		return np.int(np.ceil(n/2.)), 2
 	elif n <=17:
-		return 3, np.int(np.ceil(n/3.))
+		return np.int(np.ceil(n/3.)), 3
 	elif n <=23:
-		return 4, np.int(np.ceil(n/4.))
+		return np.int(np.ceil(n/4.)), 4
 	elif n >=23:
-		return 5, np.int(np.ceil(n/5.))
+		return np.int(np.ceil(n/5.)), 5
 
 class Creep:
-	def __init__(self, Bz, iniFilepath="",  gray_threshold=None, colormap=None):
-		self.colormap = colormap
+	def __init__(self, Bz, iniFilepath="",  gray_threshold=None):
 		if iniFilepath:
 			print("Reading ini file....",end="");
 			self.rootDir = os.path.dirname(iniFilepath)
@@ -55,6 +61,7 @@ class Creep:
 				self.all_centers = {}
 				print("Done.")
 				print(self.imParameters)
+		self.is_plot_all_figures_done = False
 		
 	def check_dirs(self):	
 		# Need to check now that all the files exist:
@@ -68,20 +75,23 @@ class Creep:
 			else:
 				print(".",end="")
 	
-	def get_color_sequence(self):
-		if not self.colormap:
-			colormap = plt.cm.gist_ncar
-		else:
-			colormap = self.colormap
-		colors = [colormap(i) for i in np.linspace(0, 0.9, len(self.Bx_s))]
-		return colors
+	def get_color_sequence(self, colormap=None, visualization_library='mpl'):
+		n = len(self.Bx_s)
+		if visualization_library == 'mpl':
+			if not colormap:
+				colormap = plt.cm.gist_ncar
+			colors = [colormap(i) for i in np.linspace(0, 0.9, n)]
+		elif visualization_library == 'bokeh':
+			colors = palettes.magma(n)
+			return colors
 	
-	def plot_results(self, isPlot=True):
+	def plot_results(self, colormap=None, isPlot=True, visualization_library='bokeh'):
 		"""
 		Plot the different images for creep calculation
 		"""
 		# Prepare to plot
 		n_alphas = 36 + 1
+		n_bokeh_plots = 7
 		plt.close("all")
 		self.figs = []
 		self.velocities_mean_error = {}
@@ -98,89 +108,111 @@ class Creep:
 		print(width, height)
 		print("Preparing plots",end="")
 		rows, cols = get_rowcols(len(self.Bx_s))
-		self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True, figsize=figsize, dpi=dpi, squeeze=False) # ColorImages
-		self.figs.append(self.fig1)
-		print(".",end="")
-		self.fig2, self.axs2 = plt.subplots(rows,cols,figsize=figsize,dpi=dpi,squeeze=False) # Histograms
-		self.figs.append(self.fig2)
-		print(".",end="")
-		self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
-		self.figs.append(self.fig3)
-		self.fig3b, self.axs3b = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
-		self.figs.append(self.fig3b)
-		print(".",end="")
-		self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements (absolute)
-		self.figs.append(self.fig4)
-		print(".",end="")
-		self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements/velocity (relative)
-		self.figs.append(self.fig5)
-		print(".",end="")
-		self.fig6, self.axs6 = plt.subplots(1,2) # Velocity
-		self.figs.append(self.fig6)
-		print(".",end="")
-		self.fig7, self.axs7 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # velocity (relative)
-		self.figs.append(self.fig7)
+		figs = {}
+		if visualization_library == 'mpl':
+			self.fig1, self.axs1 = plt.subplots(rows,cols,sharex=True, sharey=True, figsize=figsize, dpi=dpi, squeeze=False) # ColorImages
+			self.figs.append(self.fig1)
+			print(".",end="")
+			self.fig2, self.axs2 = plt.subplots(rows,cols,figsize=figsize,dpi=dpi,squeeze=False) # Histograms
+			self.figs.append(self.fig2)
+			print(".",end="")
+			self.fig3, self.axs3 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
+			self.figs.append(self.fig3)
+			self.fig4, self.axs4 = plt.subplots(rows,cols,sharex=True, sharey=False,figsize=figsize,dpi=dpi,squeeze=False) # Contours
+			self.figs.append(self.fig4)
+			print(".",end="")
+			self.fig5, self.axs5 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements (absolute)
+			self.figs.append(self.fig5)
+			print(".",end="")
+			self.fig6, self.axs6 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # Displacements/velocity (relative)
+			self.figs.append(self.fig6)
+			print(".",end="")
+			self.fig7, self.axs7 = plt.subplots(1,2,dpi=dpi,squeeze=False) # Velocity
+			self.figs.append(self.fig7)
+			print(".",end="")
+			#self.fig8, self.axs8 = plt.subplots(rows,cols,sharex=True, sharey=True,figsize=figsize,dpi=dpi,squeeze=False) # velocity (relative)
+			#self.figs.append(self.fig8)
+			out_type = 'rbg'
+		elif visualization_library == 'bokeh':
+			self.plots = {}
+			for kk in range(1,n_bokeh_plots+1):
+				self.plots[kk] = []
+			out_type = 'hex'
+	
 		print("Done")
 		# Close the figures
 		for fig in self.figs:
 			plt.close(fig.number)
 
-		colors = self.get_color_sequence()
+		if not self.is_plot_all_figures_done:
+				self.imArray_collector = {}
 
-		self.imArray_collector = {}
+		
+		
+
 		for n,Bx in enumerate(self.Bx_s):
-			print(20*"*")
-			print("Bx = %i %s, Bz = %i mT" % (Bx,self.Bx_unit,self.Bz_mT))
-			self.imParameters['firstIm'] = self.measData.varsBx[Bx]['firstIm']
-			self.imParameters['lastIm'] = self.measData.varsBx[Bx]['lastIm']
+
 			pulse_duration = self.measData.varsBx[Bx]['pulse_duration']
-			subDir = self.measData.varsBx[Bx]['subDir']
-			self.imParameters['subDirs'] = [self.rootDir, subDir, "", "", ""]
-
 			title = "Bx = %i %s, p = %s s" % (Bx,self.Bx_unit,pulse_duration)
-			
-			imArray = StackImages(**self.imParameters)
-			self.imArray_collector[Bx] = imArray
-			imArray.width = 'all'
-			imArray.useKernel = 'step'
-			imArray.kernelSign = -1
+		
+			if self.is_plot_all_figures_done:
+				imArray = self.imArray_collector[Bx]
+			else:
 
+				print(20*"*")
+				print("Bx = %i %s, Bz = %i mT" % (Bx,self.Bx_unit,self.Bz_mT))
+				self.imParameters['firstIm'] = self.measData.varsBx[Bx]['firstIm']
+				self.imParameters['lastIm'] = self.measData.varsBx[Bx]['lastIm']
+				subDir = self.measData.varsBx[Bx]['subDir']
+				self.imParameters['subDirs'] = [self.rootDir, subDir, "", "", ""]
+				self.imParameters['visualization_library'] = visualization_library
+				imArray = StackImages(**self.imParameters)
+				self.imArray_collector[Bx] = imArray
+			
 			# Plot the subplots
 			if n==0:
-				nImages = ((self.imParameters['lastIm'] - self.imParameters['firstIm'])*5)
-				#pColor = get_colors(nImages,'pastel',norm=True)
-				pColor = get_colors(nImages,self.colormap,norm=True)
+				nImages = ((self.imParameters['lastIm'] - self.imParameters['firstIm'])*2)
+				frame_colors = get_colors(nImages,'magma',norm=True,visualization_library=visualization_library)
+				bx_colors = self.get_color_sequence(colormap, visualization_library)
 
 			i, j = np.int(np.floor(n/cols)), n%cols
+			if visualization_library == 'mpl':
+				_fig1, _fig2, _fig3 = self.fig1, self.fig2, self.fig3
+				_fig4, _fig5, _fig6 = self.fig4, self.fig5, self.fig6
+				_fig7, = self.fig7
+				_ax1, _ax2, _ax3 = self.axs1[i,j], self.axs2[i,j], self.axs3[i,j]
+				_ax4, _ax5, _ax6 = self.axs4[i,j], self.axs5[i,j], self.axs6[i,j]
+				_ax7 = self.axs7
+
+			elif visualization_library == 'bokeh':
+				_fig1, _fig2, _fig3, _fig4, _fig5, _fig6, _fig7 = n_bokeh_plots * [None]
+				_ax1, _ax2, _ax3, _ax4, _ax5, _ax6, _ax7 = n_bokeh_plots * [None]
+				_ax7 = [_ax7, _ax7]
+				
 			# Figure 1 : color Image of DW motion
-			imArray.showColorImage(self.gray_threshold, palette=pColor, plotHist=None, 
-				plot_contours=False, fig=self.fig1, ax=self.axs1[i,j], title=title, noSwitchColor='black')
-			
+			figs[1] = imArray.showColorImage(self.gray_threshold, palette=colormap, plotHist=None, 
+											plot_contours=False, fig=_fig1, ax=_ax1, title=title, noSwitchColor='black')
 			# Figure 2 : plot the histogram
-			imArray.plotHistogram(imArray._switchTimesOverThreshold,fig=self.fig2,ax=self.axs2[i,j],title=title,ylabel=None)
-			
+			figs[2] = imArray.plotHistogram(imArray._switchTimesOverThreshold,fig=_fig2, ax=_ax2,title=title,ylabel=None)
 			# Calculate the contours
-			imArray.find_contours(lines_color='k',remove_bordering=True,
-				plot_centers_of_mass=True, fig=self.fig3,ax=self.axs3[i,j])
-			imArray.find_contours(remove_bordering=True,reference='center_of_mass',rescale_area=True,
-				fig=self.fig3b,ax=self.axs3b[i,j])
+			figs[3] = imArray.plotContours(lines_color='black',remove_bordering=True,
+											plot_centers_of_mass=True, color_center_of_mass=frame_colors[n], fig=_fig3, ax=_ax3, title=title)
+			figs[4] = imArray.plotContours(remove_bordering=True,reference='center_of_mass',rescale_area=True,
+											fig=_fig4, ax=_ax4, title=title)
 
-			self.axs3[i,j].set_title(title, fontdict={'fontsize': 'medium'})
-			self.axs3b[i,j].set_title(title, fontdict={'fontsize': 'medium'})
-
+			# ################################################ 
 			self.all_contours[Bx] = imArray.contours
 			self.all_centers[Bx] = imArray.centers_of_mass
-			center = imArray.centers_of_mass[0] # Center of mass of the initial domain 
-
+			# Center of mass of the initial domain 
+			center = imArray.centers_of_mass[0] 
 			#Plot the central domain
 			cnts0 = imArray.contours[0]
-			#self.axs1[i,j].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=1)
-			#self.axs3[i,j].plot(cnts0[:,1],cnts0[:,0],c=colors[n],lw=.5)
 
 			#Plot the external contour
 			lastKey = sorted(imArray.contours.keys())[-1]
 			cnts = imArray.contours[lastKey]
 			xcnts, ycnts = cnts[:,1], cnts[:,0]
+			self.xcnts, self.ycnts = cnts[:,1], cnts[:,0]
 			Xmin, Xmax, Ymin, Ymax = min(xcnts), max(xcnts), min(ycnts), max(ycnts)
 			if not n:
 				xmin, xmax, ymin, ymax = Xmin, Xmax, Ymin, Ymax
@@ -192,22 +224,37 @@ class Creep:
 				label = int(Bx)
 			else:
 				label = Bx
-			for ax in [self.axs1,self.axs3]:
-				ax[i,j].plot(xcnts,ycnts,c=colors[n],lw=1,label=label)
+
+			limits = np.floor(xmin/100.)*100, np.ceil(xmax/100.)*100, np.ceil(ymax/100.)*100, np.floor(ymin/100.)*100
+			step_angle = np.pi/10
+			title_Bx = r"$B_x (%s)$" % (self.Bx_unit)
+			if visualization_library == 'mpl':
+				for axs in [self.axs1,self.axs3]:
+					axs[i,j].plot(xcnts,ycnts,c=bx_colors[n], lw=1, label=label)
+			elif visualization_library == 'bokeh':
+				for axs in [figs[1], figs[3]]:
+					(x0, y0), (x1, y1) = self.imParameters['imCrop']
+					H = y1 - y0
+					axs.line(xcnts, H-ycnts, color=bx_colors[n],line_width=2,legend_label=str(label))
+
 
 			# Plot dispacements in polar coordinates from the center
-			theta, r, frames = polar.plot_displacement(imArray.contours,origin=center,reference='center',
-				swope_xy=True,fig=self.fig4,ax=self.axs4[i,j],title=title,step_in_frames=self.step_in_frames)
-			
-			# plot last contours
-			#self.axs4[rows-1,cols-1].plot(theta/np.pi*180,r,c=colors[n],lw=2,label=label)
-			self.axs4[i,j].plot(theta/np.pi*180,r,c=colors[n],lw=2)
-			
+			fig5, theta, r, frames = polar.plot_displacement(imArray.contours,origin=center,reference='center',
+									swope_xy=True,fig=_fig5,ax=_ax5,title=title,step_in_frames=self.step_in_frames, 
+									visualization_library=visualization_library)
 			# Plot dispacements in polar coordinates from the nucleated domain
-			theta, last_r, frames = polar.plot_displacement(imArray.contours,origin=center,reference='nucleated_domain',
-				swope_xy=True,fig=self.fig5,ax=self.axs5[i,j],title=title,step_in_frames=self.step_in_frames)
-			self.axs5[rows-1,cols-1].plot(theta/np.pi*180,last_r,c=colors[n],lw=2,label=label)
-			self.axs5[i,j].plot(theta/np.pi*180,last_r,c=colors[n],lw=2)
+			fig6, last_theta, last_r, frames = polar.plot_displacement(imArray.contours,origin=center,reference='nucleated_domain',
+									swope_xy=True,fig=_fig6,ax=_ax6,title=title,step_in_frames=self.step_in_frames,
+									visualization_library=visualization_library)
+					
+			if visualization_library == 'bokeh':
+				figs[5], figs[6] = fig5, fig6
+				figs[5].line(theta/np.pi*180, r, color=bx_colors[n], line_width=2)
+				figs[6].line(last_theta/np.pi*180, last_r, color=bx_colors[n], line_width=2)
+			elif visualization_library == 'mpl':
+				self.axs5[i,j].plot(theta/np.pi*180,r,c=bx_colors[n],lw=2)
+				self.axs6[i,j].plot(last_theta/np.pi*180, last_r, c=bx_colors[n], lw=2)
+
 
 			# Plot the mean velocity as a function of theta
 			v = polar.calc_velocity(imArray.contours,origin=center,n_new_thetas=n_alphas,swope_xy=True)
@@ -219,64 +266,99 @@ class Creep:
 			else:
 				self.velocities[Bx] = v_mean
 				self.velocities_error[Bx] = v_error
-			polar.plot_mean_velocity(thetas,v_mean,v_error,fig=self.fig7,ax=self.axs7[i,j],title=title,color=colors[n])
-			polar.plot_mean_velocity(thetas,v_mean,v_error,fig=self.fig7,ax=self.axs7[rows-1,cols-1],
-				title="",label=label,color=colors[n])
+			fig7a = polar.plot_mean_velocity(thetas,v_mean,v_error,fig=_fig7,ax=_ax7[0],
+									title=title,color=bx_colors[n], visualization_library=visualization_library)
+			fig7b = polar.plot_mean_velocity(thetas,v_mean,v_error,fig=_fig7,ax=_ax7[1],
+										title="",label=label,color=bx_colors[n], visualization_library=visualization_library)
+			
+			if visualization_library == 'bokeh':
+				for k in range(1, n_bokeh_plots):
+					self.plots[k].append(figs[k])
 
+
+		# if j != cols-1 and visualization_library == 'bokeh':
+		# 	for n in range(1,n_bokeh_plots+1):
+		# 		for k in range(j+1, cols):
+		# 			row[n].append(None)
+		# 		plots[n].append(row[n])
 		# Plot velocities at different angles
 		v = self.velocities
 		v_err = self.velocities_error
-		v.index = v.index*180/np.pi
-		v_err.index = v_err.index*180/np.pi
+		v.index = v.index * 180 / np.pi
+		v_err.index = v_err.index * 180 / np.pi
 		i_shift = int((n_alphas - 1) / 2)
-		cl = get_colors(i_shift+1,'hue',True)[1:]
+		cl = get_colors(i_shift+1,'magma',True,visualization_library=visualization_library)[1:]
+		xlabel = r"$B_x$ ({})".format(self.Bx_unit)
+		ylabel = "microns/s"
+
 		for i in range(i_shift):
 			col = 0*(i!=0) + 1*(i==0)
 			label = "{} deg".format(v.index[i])
-			self.axs6[col].errorbar(v.columns,v.iloc[i],v_err.iloc[i],fmt='--o',c=cl[i],label=label)
-			label = "{} deg".format(v.index[i+i_shift])
-			self.axs6[col].errorbar(v.columns,v.iloc[i+i_shift],v_err.iloc[i+i_shift],fmt='-o',c=cl[i],label=label)
-		for i in range(2):
-			self.axs6[i].set_ylabel("microns/s")
-			self.axs6[i].set_xlabel(r"$B_x$ ({})".format(self.Bx_unit))
-			l1 = self.axs6[i].legend(fontsize=12,title="Angle (deg)",
-				bbox_to_anchor=(-.05, 1), loc=1, borderaxespad=0.)
-			l1.set_draggable(True)
+			if visualization_library == 'mpl':
+				self.axs7[col].errorbar(v.columns,v.iloc[i],v_err.iloc[i],fmt='--o',c=cl[i],label=label)
+				self.axs7[col].errorbar(v.columns,v.iloc[i+i_shift],v_err.iloc[i+i_shift],fmt='-o',c=cl[i],label=label)
+			elif visualization_library == 'bokeh':
+				labels = xlabel, ylabel, label
+				fig7a = mkb.plot_errorbar(v.columns, v.iloc[i], v_err.iloc[i], labels, color=cl[i], size=5, fig=fig7a) 
+				label = "{} deg".format(v.index[i+i_shift])
+				figt7b = mkb.plot_errorbar(v.columns, v.iloc[i], v_err.iloc[i], labels, color=cl[i], size=5, fig=fig7b) 
+		
+		if visualization_library == 'mpl':
+			for i in range(2):
+				self.axs7[i].set_ylabel(ylabel)
+				self.axs7[i].set_xlabel(xlabel)
+				l1 = self.axs7[i].legend(fontsize=12,title="Angle (deg)",
+					bbox_to_anchor=(-.05, 1), loc=1, borderaxespad=0.)
+				l1.set_draggable(True)
+		elif visualization_library == 'bokeh':
+			# Add the legend
+			self.plots[7] = [fig7a, fig7b]
+
+		# # Last plot
+		# ax = axs[rows-1,cols-1]
+		# ax.plot(center[1],center[0],'ko')
+		# polar.plot_rays((center[1],center[0]),step_angle,ax,limits)
+		# ax.axis(limits)
+		# #ax.set_aspect('equal')
+		# l1 = ax.legend(fontsize=12,title=title_Bx,
+		# 				bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
+		# l1.set_draggable(True)
+
+		# ax = self.axs7[rows-1,cols-1]
+		# l1 = ax.legend(fontsize=12,title=title_Bx,numpoints=1,
+		#  	bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
+		# l1.set_draggable(True)
+
+		# for axs in [self.axs4,self.axs5]:
+		# 	ax = axs[rows-1,cols-1]
+		# 	ax.grid(True)
+		# 	ax.set_xlabel("angle (deg)")
+		# 	l1 = ax.legend(fontsize=12,title=title_Bx,ncol=1,
+		# 		bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
+		# 	l1.set_draggable(True)
+		# self.axs4[rows-1,cols-1].set_title("Last contour")
+		# self.axs4[rows-1,cols-1].set_title("Velocity")
+
+		# #self.axs4[rows-1,cols-1].plot(theta/np.pi*180,r,c=colors[n],lw=2,label=label)
+		# self.axs5[rows-1,cols-1].plot(theta/np.pi*180,last_r,c=colors[n],lw=2,label=label)
 			
-				
-		limits = np.floor(xmin/100.)*100, np.ceil(xmax/100.)*100, np.ceil(ymax/100.)*100, np.floor(ymin/100.)*100
-		step_angle = np.pi/10
-		title_Bx = r"$B_x (%s)$" % (self.Bx_unit)
-		for axs in [self.axs1,self.axs3]:
-			ax = axs[rows-1,cols-1]
-			ax.plot(center[1],center[0],'ko')
-			polar.plot_rays((center[1],center[0]),step_angle,ax,limits)
-			ax.axis(limits)
-			#ax.set_aspect('equal')
-			l1 = ax.legend(fontsize=12,title=title_Bx,
-				bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-			l1.set_draggable(True)
+		# for fig in self.figs:
+		# 	fig.suptitle(self.full_title,fontsize='xx-large')
 
-		ax = self.axs7[rows-1,cols-1]
-		l1 = ax.legend(fontsize=12,title=title_Bx,numpoints=1,
-		 	bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-		l1.set_draggable(True)
 
-		for axs in [self.axs4,self.axs5]:
-			ax = axs[rows-1,cols-1]
-			ax.grid(True)
-			ax.set_xlabel("angle (deg)")
-			l1 = ax.legend(fontsize=12,title=title_Bx,ncol=1,
-				bbox_to_anchor=(1.05, 0), loc=3, borderaxespad=0.)
-			l1.set_draggable(True)
-		self.axs4[rows-1,cols-1].set_title("Last contour")
-		self.axs4[rows-1,cols-1].set_title("Velocity")
-
-		for fig in self.figs:
-			fig.suptitle(self.full_title,fontsize='xx-large')
 
 		if isPlot:
-			plt.show()
+			if visualization_library == 'mpl':
+				plt.show()
+			elif visualization_library == 'bokeh':
+				
+				gridplots = []
+				for i in range(1,n_bokeh_plots+1):
+					_gr = gridplot(self.plots[i], ncols=cols, sizing_mode='scale_both',merge_tools=True)
+					gridplots.append(_gr)
+				self.fig1, self.fig2, self.fig3, self.fig4, self.fig5, self.fig6, self.fig7 = gridplots
+		self.is_plot_all_figures_done = True
+				
 
 	def plot_trajectories_centers_of_mass(self,range_Bx=None):
 		fig = plt.figure()

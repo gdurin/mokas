@@ -19,7 +19,8 @@ class Domains:
     This class calculates various properties of a domain,
     given a map of the switch times as a 2D array (switch2D)
     """
-    def __init__(self, switch2D, no_switch_value=-1, NNstructure=None):
+    def __init__(self, switch2D, no_switch_value=-1, NNstructure=None,
+                    is_remove_small_holes=True, small_holes_area=64):
         if not NNstructure:
             self.NNstructure = np.ones((3, 3))
         else:
@@ -28,14 +29,13 @@ class Domains:
         self.sw = sw[sw != no_switch_value]
         self.switch2D = switch2D
         self.switched_domain = switch2D >= self.sw[0]
+        if is_remove_small_holes:
+            self.switched_domain = remove_small_holes(~self.switched_domain, small_holes_area)
+            self.switched_domain = ~self.switched_domain
         self.is_single_domain, self.initial_clusters, self.n_initial_clusters = self._is_single_domain(self.switched_domain, self.NNstructure)
         self.max_switch = self.max_switch_not_touching_edges()
 
-    def _is_single_domain(self, domain, NNstructure, 
-                            is_remove_small_holes=True):
-        # remove small holes
-        if is_remove_small_holes:
-            domain = remove_small_holes(domain)
+    def _is_single_domain(self, domain, NNstructure):
         im, n_cluster = mahotas.label(domain, NNstructure)
        
         if n_cluster > 1:
@@ -130,8 +130,6 @@ class Domains:
         """
         print("%s Get the initial domain" % SPACE)
         q = np.copy(self.switched_domain)
-        if is_remove_small_holes:
-            q = remove_small_holes(q)
         print("There are %i initial clusters" % self.n_initial_clusters)        
         if not self.is_single_domain:
             if self.n_initial_clusters == 2:

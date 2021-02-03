@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import pandas as pd
+import bokeh.plotting as plk
+import mokas_bokeh as mkb
+
 
 def to_radians(theta):
 	return theta/180*np.pi
@@ -42,7 +45,8 @@ def cart2polar(xy,origin=(0,0),swope_xy=False, reverse_y=True,ordered=True):
 	return r, theta
 
 
-def plot_rays(center,step_angle,ax,axis_limits=None):
+def get_rays(center,step_angle,ax,axis_limits=None):
+        data = {}
         xc,yc = center
         if axis_limits is None:
         	axis_limits = ax.axis()
@@ -52,8 +56,10 @@ def plot_rays(center,step_angle,ax,axis_limits=None):
             for sign in [-1,1]:
             	y = sign*np.tan(m)*(x-xc)+yc
     	        selection = (y>=ymin) & (y<=ymax)
-    	        ax.plot(x[selection],y[selection],'k--',lw=0.5)
-        ax.plot((xc,xc),(ymin,ymax),'k--',lw=0.5)
+    	        #ax.plot(x[selection],y[selection],'k--',lw=0.5)
+    	        data[m] = x[selection], y[selection]
+        #ax.plot((xc,xc),(ymin,ymax),'k--',lw=0.5)
+        return data
 
 def calc_velocity(contours,origin,n_new_thetas=720,swope_xy=True):
 	"""
@@ -93,29 +99,40 @@ def calc_mean_error_velocity(v):
 	v_err = v.std(0)/(time_steps)**0.5
 	return v_mean, v_err
 
-def plot_mean_velocity(x,v_mean,v_err,fig=None,ax=None,title=None,label=None,color='k'):
+def plot_mean_velocity(x,v_mean,v_err,fig=None,ax=None,title=None,label=None,color='k',
+						visualization_library='mpl'):
 	"""
 	Plot the velocity for different angles
 	"""
-	if fig is None:
-		fig, ax = plt.subplots(1,1)
-	# v is a pandas.DataFrame, with rows as time, and cols as thetas
-	#ax.plot(v.columns*180/np.pi,v_mean,'o')
-	ax.errorbar(to_degree(x),v_mean,v_err,fmt='o',c=color,label=label)
-	ax.grid(True)
-	ax.set_xlabel("angle (deg)", fontsize='xx-small')
-	ax.set_xticks(np.arange(-2,3)*90)
-	for tick in ax.xaxis.get_major_ticks():
-		tick.label.set_fontsize('xx-small') 
-	ax.set_ylabel("average velocity", fontsize='xx-small')
-	ax.set_title(title, fontsize='xx-small')
-	return
+	x_label = "angle (deg)"
+	y_label = "average velocity"
+	if visualization_library == 'mpl':
+		if fig is None:
+			fig, ax = plt.subplots(1,1)
+		# v is a pandas.DataFrame, with rows as time, and cols as thetas
+		#ax.plot(v.columns*180/np.pi,v_mean,'o')
+		ax.errorbar(to_degree(x),v_mean,v_err,fmt='o',c=color,label=label)
+		ax.grid(True)
+		ax.set_xlabel(x_label, fontsize='xx-small')
+		ax.set_xticks(np.arange(-2,3)*90)
+		for tick in ax.xaxis.get_major_ticks():
+			tick.label.set_fontsize('xx-small') 
+		ax.set_ylabel(y_label, fontsize='xx-small')
+		ax.set_title(title, fontsize='xx-small')
+	elif visualization_library == 'bokeh':
+		if fig is None:
+			fig = plk.figure(title=title)
+		labels = x_label, y_label, label
+		fig = mkb.plot_errorbar(x, v_mean, v_err, labels, color, fig=fig)
+
+	return fig
 
 
 def plot_displacement(contours,origin,reference='nucleated_domain',
 					n_new_thetas=720,swope_xy=True,
 					fig=None,ax=None,title=None,step_in_frames=10,
-					is_colors=False):
+					is_colors=False,
+					visualization_library='mpl'):
 	"""
 	Plot dispacements at different angles
 
@@ -133,8 +150,13 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 	swope_xy : bool
 		swope x-y axis
 	"""
-	if fig is None:
-		fig, ax = plt.subplots(1,1,sharex=True)
+	if visualization_library == 'mpl':
+		if fig is None:
+			fig, ax = plt.subplots(1,1,sharex=True)
+			ax.set_title(title, fontsize='xx-small')
+	elif visualization_library == 'bokeh':
+		if fig is None:
+			fig = plk.figure(title=title)
 	switches = sorted(contours.keys())
 
 	syb = '-'
@@ -154,30 +176,41 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 			if switch == 0:
 				r0 = new_r
 			delta_r = new_r-r0
-			ax.plot(to_degree(new_thetas), delta_r, lb, lw=lw)
 			if reference == 'differential':
 				r0 = new_r
+			_x, _y = new_thetas, delta_r
 		else:
-			ax.plot(to_degree(theta), r, lb,lw=lw)
+			_x, _y = theta, r
+		if visualization_library == 'mpl':
+			ax.plot(_x, _y, lb, lw=lw)
+		elif visualization_library == 'bokeh':
+			fig.line(_x, _y, legend_label=str(lb), line_width=lw)
 
 
-	ax.grid(True)
-	ax.set_xlabel("angle (deg)", fontsize='xx-small')
-	ax.set_xticks(np.arange(-2,3)*90)
-	for tick in ax.xaxis.get_major_ticks():
-		tick.label.set_fontsize('xx-small') 
+	xaxis_label = "angle (deg)"
 	if reference == 'nucleated_domain':
-		ax.set_ylabel("distance from the nucleated domain", fontsize='xx-small')
+		distance_label = "distance from the nucleated domain"
 	else:
-		ax.set_ylabel("distance from the center", fontsize='xx-small')
-	ax.set_title(title, fontsize='xx-small')
+		distance_label = "distance from the center"	
+
+	if visualization_library == 'mpl':
+		ax.grid(True)
+		ax.set_xlabel(xaxis_label, fontsize='xx-small')
+		ax.set_xticks(np.arange(-2,3)*90)
+		for tick in ax.xaxis.get_major_ticks():
+			tick.label.set_fontsize('xx-small') 
+		ax.set_ylabel(distance_label, fontsize='xx-small')
+	elif visualization_library == 'bokeh':
+		fig.xaxis.axis_label = xaxis_label
+		fig.yaxis.axis_label = distance_label
+		
 	# return the last contour
 	# and the n. of frames between the first and the last switches
 	frames = switches[-1] - switches[1] + 1
 	if reference is not 'center':
-		return new_thetas, delta_r, frames
+		return fig, new_thetas, delta_r, frames
 	else:
-		return theta, r, frames
+		return fig, theta, r, frames
 
 if __name__ == "__main__":
 	Bxs = [-200,-100,-50,0,50,100,200]

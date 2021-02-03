@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.colors as mpl_colors
 from matplotlib import cm
 from colorsys import hsv_to_rgb, hls_to_rgb
+import bokeh.palettes as palettes
 
 # Load ral colors
 # See http://www.ralcolor.com/
@@ -60,7 +61,13 @@ def get_cmap(N, cmap='hsv'):
     map_index_to_rgb_color = [[int(col[0]*255),int(col[1]*255),int(col[2]*255)] for col in pColor]
     return map_index_to_rgb_color
 
-def get_colors(num_colors, palette='hue', norm=False):
+def get_colors(num_colors, palette='hue', norm=False, 
+                visualization_library='mpl'):
+    """
+    for bokeh
+    possible palettes: magma, inferno, viridis, cividis
+
+    """
     black = np.array(3*[0])
     white = np.array(3*[255])
     if palette == 'hue':
@@ -76,9 +83,19 @@ def get_colors(num_colors, palette='hue', norm=False):
     elif palette == 'pastel':
         colors = (np.random.randint(0, 256, (num_colors,3)) + white) / 2
     else:
-        colors = get_cmap(num_colors, palette)
-    colors = np.vstack((black,colors))
-    if norm:
+        if visualization_library == 'mpl':
+            colors = get_cmap(num_colors, palette)
+            #colors = np.vstack((black,colors))
+        elif visualization_library == 'bokeh':
+            if palette == 'magma':
+                colors = palettes.magma(num_colors)
+            elif palette == 'inferno':
+                colors = palettes.inferno(num_colors)
+            elif palette == 'cividis':
+                colors = palettes.cividis(num_colors)
+            elif palette == 'viridis':
+                colors = paletters.viridis(num_colors)
+    if visualization_library == 'mpl' and norm:
         colors = colors/255.
     return colors
 
