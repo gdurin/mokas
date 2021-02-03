@@ -1874,6 +1874,10 @@ class StackImages:
                 if lines_color is not None:
                     _lines_color = lines_color
                 else:
+                    n_images = len(self.sw)
+                    n = float(switch - self.sw[0])
+                    clr = getKoreanColors(n, n_images)
+                    clr = tuple([c / 255. for c in clr])
                     _lines_color = clr
                 if self.visualization_library == 'mpl':
                     ax.plot(X,Y,_lines_color,antialiased=True,lw=lw)
