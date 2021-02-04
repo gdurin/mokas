@@ -21,11 +21,11 @@ from PyQt5 import QtWidgets
 
 def get_rowcols(n):
 	if n <= 11:
-		return np.int(np.ceil(n/2.)), 2
+		return np.int(np.ceil(n/2.)), 3
 	elif n <=17:
-		return np.int(np.ceil(n/3.)), 3
+		return np.int(np.ceil(n/3.)), 4
 	elif n <=23:
-		return np.int(np.ceil(n/4.)), 4
+		return np.int(np.ceil(n/4.)), 5
 	elif n >=23:
 		return np.int(np.ceil(n/5.)), 5
 
@@ -174,6 +174,7 @@ class Creep:
 				nImages = ((self.imParameters['lastIm'] - self.imParameters['firstIm'])*2)
 				frame_colors = get_colors(nImages,'magma',norm=True,visualization_library=visualization_library)
 				bx_colors = self.get_color_sequence(colormap, visualization_library)
+				self.frame_colors = frame_colors
 
 			i, j = np.int(np.floor(n/cols)), n%cols
 			if visualization_library == 'mpl':
@@ -193,11 +194,11 @@ class Creep:
 			figs[1] = imArray.showColorImage(self.gray_threshold, palette=colormap, plotHist=None, 
 											plot_contours=False, fig=_fig1, ax=_ax1, title=title, noSwitchColor='black')
 			# Figure 2 : plot the histogram
-			figs[2] = imArray.plotHistogram(imArray._switchTimesOverThreshold,fig=_fig2, ax=_ax2,title=title,ylabel=None)
+			figs[2] = imArray.plotHistogram(imArray._switchTimesOverThreshold,fill_color=frame_colors,fig=_fig2, ax=_ax2,title=title,ylabel=None)
 			# Calculate the contours
 			figs[3] = imArray.plotContours(lines_color='black',remove_bordering=True,
 											plot_centers_of_mass=True, color_center_of_mass=frame_colors[n], fig=_fig3, ax=_ax3, title=title)
-			figs[4] = imArray.plotContours(remove_bordering=True,reference='center_of_mass',rescale_area=True,
+			figs[4] = imArray.plotContours(lines_color='black', remove_bordering=True,reference='center_of_mass',rescale_area=True,
 											fig=_fig4, ax=_ax4, title=title)
 
 			# ################################################ 

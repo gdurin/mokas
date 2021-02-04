@@ -182,9 +182,10 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 		else:
 			_x, _y = theta, r
 		if visualization_library == 'mpl':
-			ax.plot(_x, _y, lb, lw=lw)
+			ax.plot(to_degree(_x), _y, lb, lw=lw)
 		elif visualization_library == 'bokeh':
-			fig.line(_x, _y, legend_label=str(lb), line_width=lw)
+			fig.line(to_degree(_x), _y, line_width=lw,
+					color='black')
 
 
 	xaxis_label = "angle (deg)"

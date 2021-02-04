@@ -35,6 +35,7 @@ try:
     from bokeh.models.annotations import Title
     import bokeh.palettes as palettes
     from bokeh.transform import factor_cmap, linear_cmap
+    import colorcet as cc
     is_bokeh = True
 except:
     is_bokeh = False
@@ -83,7 +84,6 @@ except:
 
 # Adjust the interpolation scheme to show the images
 mpl.rcParams['image.interpolation'] = 'nearest'
-
 
 
 def natural_key(string_):
@@ -624,7 +624,6 @@ class StackImages:
         switchTimesWithFillValue = maskedSwitchTimes.filled(fillValue) # Isn't it fantastic?
         return switchTimesWithFillValue
 
-
     def _isColorImageDone(self,ask=True):
         print("You must first run the getSwitchTimesAndSteps script: I'll do that for you")
         if ask:
@@ -662,15 +661,18 @@ class StackImages:
         self._nImagesWithSwitch = self.max_switch - self.min_switch + 1
         print("Gray changes are between %s and %s" % (min(self._switchSteps), max(self._switchSteps)))
 
-        if self.visualization_library == 'mpl':
-            # Calculate the colours, considering the range of the switch values obtained
-            self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
-            self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
-        elif self.visualization_library == 'bokeh':
-            name, number = palette.split("_")
-            number = int(number)
+        # Calculate the colours, considering the range of the switch values obtained
+        self._pColors = getPalette(self._nImagesWithSwitch, palette, noSwitchColor)
+        self._colorMap = mpl.colors.ListedColormap(self._pColors, 'pColorMap')
+        if self.visualization_library == 'bokeh':
             background_color = mpl.colors.to_hex(noSwitchColor)
-            p = [background_color] + list(palettes.all_palettes[name][number])
+            if "_" in palette:
+                name, number = palette.split("_")
+                number = int(number)
+                p = [background_color] + list(palettes.all_palettes[name][number])
+            else:
+                p = [mpl.colors.to_hex(c) for c in self._colorMap.colors]
+                p = [background_color] + p
             self._colorMap = tuple(p)
 
         central_points = np.arange(self.min_switch, self.max_switch, dtype=float)
@@ -718,7 +720,6 @@ class StackImages:
             self._switchTimesUnique = np.unique(self._switchTimes2D) + self.min_switch
         return
 
-
     def showColorImage(self, threshold=None, data=None, palette='random', erase_small_events_percent=None,
                         plotHist=False, plot_contours=False, 
                         noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
@@ -731,14 +732,6 @@ class StackImages:
         threshold: integer, optional
             Defines if the pixel switches when gray_level_change >= threshold
         palette: string, required, default = 'random'
-            Choose a palette between 'korean', 'randomKorean', 'random', 'hue', 'randomHue', 'ral'
-            'randomKorean' is a random permutation of the korean palette
-            'random' : calculated on the fly, so each call of the method gives different colors
-            'hue' : equally spaced colors in the HUE weel
-            'randomHue' : random of above
-            'ral': ral colors
-            'coolwarm': from Red to Blue
-            'pastel': add white to random colors
         erase_small_events_percent: int, optional
             Erase events smaller than a percentage of the largest one 
         noSwithColor: string, optional, default = 'black'
@@ -866,7 +859,7 @@ class StackImages:
             
         return fig
 
-    def plotHistogram(self, data, palette='random', fig=None, ax=None, title=None, ylabel=None):
+    def plotHistogram(self, data, palette='random',fill_color=None, fig=None, ax=None, title=None, ylabel=None):
         #image_numbers = np.unique(data)
         #i0, i1 = image_numbers[0], image_numbers[-1] + 1
         #central_points = np.arange(i0, i1)
@@ -904,7 +897,7 @@ class StackImages:
             #mapper = linear_cmap(field_name='edges', palette=palette ,low=edges[1],high=edges[-1])
             
             fig.quad(top=hist,bottom=0, left=edges[:-1], right=edges[1:],
-                    #fill_color=fill_color, 
+                    fill_color=self._colorMap, 
                     #fill_color = self._colorMap,
                     line_color="white", alpha=1)
             fig.y_range.start = 0
@@ -1087,7 +1080,7 @@ class StackImages:
 
 
     def showRawAndCalcEvents(self, nImage=None, preAvalanches=True, \
-        isTwoImages=False, subtract_first_image=False, autoscale=False):
+        isTwoImages=False, subtract_first_image=False, autoscale=False, figsize=(30,20)):
         if self._switchTimes is None:
             print("Need to calculate the color image first")
             return
@@ -1099,11 +1092,11 @@ class StackImages:
             return
         else:
             self.nImage = nImage
-        self.showRawAndCalcImages('event', nImage, preAvalanches, isTwoImages,
-                            subtract_first_image, autoscale)
+        self._showRawAndCalcImages('event', nImage, preAvalanches, isTwoImages,
+                            subtract_first_image, autoscale, figsize=figsize)
 
-    def showRawAndCalcImages(self, data_type, nImage, preAvalanches=True, \
-        isTwoImages=False, subtract_first_image=False, autoscale=False):
+    def _showRawAndCalcImages(self, data_type, nImage, preAvalanches=True, \
+        isTwoImages=False, subtract_first_image=False, autoscale=False, figsize=(30,20)):
 
         """
         show the Raw and the Calculated image n
@@ -1133,7 +1126,9 @@ class StackImages:
             im = data == self.nImage
             step_image = np.max(self._switchTimes2D[im].flatten()) - (self.nImage - 1)
             #step_image = self.sw_clusters_end[i[0]] - (self.nImage - 1)
-
+        else:
+            print("Choose between 'event' and 'cluster'")
+            return
         # Subtract first image
         if subtract_first_image:
             self.subtract_first_image = True
@@ -1145,8 +1140,9 @@ class StackImages:
         else:
             rows, cols = 2,3
 
-        if self.figRawAndCalc and self.isTwoImages==isTwoImages:
+        if self.figRawAndCalc and self.isTwoImages == isTwoImages:
             plt.figure(self.figRawAndCalc.number)
+
             axs = self.figRawAndCalc.get_axes()
             axs = np.array(axs).reshape((rows,cols))
             for i in range(rows):
@@ -1155,7 +1151,7 @@ class StackImages:
         else:
             #self.figRawAndCalc = plt.figure()
             self.figRawAndCalc,axs =  plt.subplots(rows,cols,sharex=True, sharey=True)
-            self.figRawAndCalc.set_size_inches((10*rows,5*rows))
+            self.figRawAndCalc.set_size_inches(figsize)
             if isTwoImages:
                 self.figRawAndCalc.set_facecolor('black')
                 self.isTwoImages = isTwoImages
@@ -1168,18 +1164,11 @@ class StackImages:
         #mapGreyandBlack = mpl.colors.ListedColormap([(0.75,0.75,0.75),(0,0,0)],'mymap',2) # in grey and black      
         mapGreyandBlack = mpl.colors.ListedColormap([white, gray],'mymap',2) # in grey and black      
 
-
-
-
         im, n_clusters = self.label(switchTimes_images)
         sizes = mahotas.labeled.labeled_size(im)[1:]
                 
         self.figRawAndCalc.suptitle('Number of clusters = %i ; Biggest cluster size = %i pixels' % (n_clusters, np.max(sizes)), fontsize=18)
             
-
-
-
-
         # Plot the two raw images first
         if isTwoImages:
             #ax1 = plt.subplot(1,2,1)
@@ -1790,7 +1779,7 @@ class StackImages:
                 _y = self.imHeight - _y
                 Y = self.imHeight - Y
             fig.circle(_x, _y, size=12, color=color_center_of_mass)
-            fig.line(X, Y, line_width=2)
+            fig.line(X, Y, line_width=1, line_color='black')
 
         
         self.sw = self.domain.sw[:self.domain.max_switch]
@@ -1884,7 +1873,7 @@ class StackImages:
                 elif self.visualization_library == 'bokeh':
                     if invert_y_axis:
                         Y = self.imHeight - Y
-                    fig.line(X,Y,color='black', line_width=lw)
+                    fig.line(X,Y,line_color=lines_color, line_width=lw)
 
 
         if plot_rays:
