@@ -198,8 +198,11 @@ class EventsAndClusters():
         cluster2D_end = np.copy(self.switch2D)
         cluster_switches = np.unique(cluster2D_end)[1:]
         
+        q = list(cluster_limits)
+        _cluster_limits = np.array(q)
+        
         # pass I
-        for sw_in, sw_fin in cluster_limits:
+        for sw_in, sw_fin in _cluster_limits:
             print(sw_in, sw_fin)
             switches = range(sw_in, sw_fin, 1)
             # loop for the switches within the limits
@@ -231,15 +234,16 @@ class EventsAndClusters():
 
         # pass II
         # With the procedure above all the cluster2D_start have a value sw_in 
-        n_cluster_limits = len(cluster_limits)
-        for i, (sw_in, sw_fin) in enumerate(cluster_limits):
+        
+        n_cluster_limits = _cluster_limits.shape[0]
+        for i, (sw_in, sw_fin) in enumerate(_cluster_limits):
             main_cluster_size = np.sum(cluster2D_start == sw_in)
             if i == 0:
                 sw0 = cluster_switches[0] - 1
             if i == n_cluster_limits - 1:
                 sw1 = cluster_switches[-1]
             else:
-                sw1 = cluster_limits[i+1][0]
+                sw1 = _cluster_limits[i+1][0]
             q = np.logical_and((cluster2D_start > sw0), (cluster2D_start < sw1))
             sw0 = sw_fin
             

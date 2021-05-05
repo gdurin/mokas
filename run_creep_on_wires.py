@@ -83,8 +83,7 @@ class RunWires:
                                     plot_contours=True, plotHist=None, 
                                     erase_small_events_percent=self.erase_small_events_percent, 
                                     fig=self.fig1, ax=self.axs1[0, n], 
-                                    title=title, noSwitchColor='black',
-                                    xax=False, yax=False)
+                                    title=title, noSwitchColor='black')
             imArray.plotHistogram(imArray._switchTimesOverThreshold,
                                     fig=self.fig2, ax=self.axs2[n, 0],
                                     title=title, ylabel=None)

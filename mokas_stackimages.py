@@ -20,7 +20,7 @@ import mahotas
 #import h5py
 import tables
 import mokas_polar as polar
-import collect_images
+import mokas_collect_images as collect_images
 from mokas_colors import get_cmap, getKoreanColors, getPalette
 import mokas_gpu as mkGpu
 from mokas_domains import Domains
@@ -32,6 +32,7 @@ try:
     #                      Grid, LinearAxis, PanTool, Plot, WheelZoomTool,)
     import bokeh.models as bkm
     import bokeh.plotting as plk
+    from bokeh.models import Label, DataRange1d, Range1d
     from bokeh.models.annotations import Title
     import bokeh.palettes as palettes
     from bokeh.transform import factor_cmap, linear_cmap
@@ -473,7 +474,7 @@ class StackImages:
         try:
             plt.imshow(self._imDiff(imNumbers, invert), plt.cm.gray)
             plt.show()
-        except:
+        except: 
             return
 
     def imDiffSave(self,imNumbers='all', invert=False, mainDir=None):
@@ -707,9 +708,10 @@ class StackImages:
             im = mahotas.labeled.remove_bordering(im)
             im, n_cluster = mahotas.labeled.relabel(im)
             sizes = mahotas.labeled.labeled_size(im)
-            too_small = np.where(sizes < percentage * np.max(sizes[1:]))
-            im = mahotas.labeled.remove_regions(im, too_small)
-            print("Small events erased")
+            if len(sizes) > 1:
+                too_small = np.where(sizes < percentage * np.max(sizes[1:]))
+                im = mahotas.labeled.remove_regions(im, too_small)
+                print("Small events erased")
             #index_max_size = sizes.argmax()
             #self.initial_domain = im == index_max_size + 1
             # Erase the small switches
@@ -721,8 +723,9 @@ class StackImages:
         return
 
     def showColorImage(self, threshold=None, data=None, palette='random', erase_small_events_percent=None,
-                        plotHist=False, plot_contours=False, 
-                        noSwitchColor='black', ask=False, fig=None, ax=None, title=None, figsize=(8,7)):
+                        plotHist=False, plot_contours=False, noSwitchColor='black', 
+                        ask=False, fig=None, ax=None, title=None, figsize=(8,7),
+                        xax=False, yax=False):
         """
         Show the calculated color Image of the avalanches.
         Run getSwitchTimesAndSteps if not done before.
@@ -751,14 +754,17 @@ class StackImages:
             data = self._switchTimes2D
         if fig is None:
             self._figColorImage = self._plotColorImage(data, 
-                self._colorMap, self._figColorImage, title=title, figsize=figsize)
+                                        self._colorMap, self._figColorImage,
+                                        title=title, figsize=figsize)
             fig = self._figColorImage
         else:
-            fig = self._plotColorImage(data, colorMap=self._colorMap, fig=fig, ax=ax, title=title)
+            fig = self._plotColorImage(data, colorMap=self._colorMap, 
+                                        fig=fig, ax=ax, title=title)
         if plot_contours:
             if ax is None:
                 ax = fig.gca()
-            self.plotContours(lines_color='k', remove_bordering=True, invert_y_axis=False, fig=fig, ax=ax)
+            self.plotContours(lines_color='black', remove_bordering=True, invert_y_axis=False, 
+                fig=fig, ax=ax)
         if plotHist:
             # Plot the histogram
             self.plotHistogram(self._switchTimesOverThreshold, ylabel="Avalanche size (pixels)")
@@ -789,8 +795,7 @@ class StackImages:
             self.showPixelTimeSequence(pixel, newPlot=True)
             #plt.show()
 
-    def _plotColorImage(self, data, colorMap, fig=None, ax=None, title=None, figsize=(8,7),
-                        xax=False, yax=False):
+    def _plotColorImage(self, data, colorMap, fig=None, ax=None, title=None, figsize=(8,7)):
         """
         if the caption is not shown, just enlarge the image
         as it depends on the length of the string retured by
@@ -827,30 +832,20 @@ class StackImages:
             ax.set_title(title, fontsize='xx-small')
             cid = fig.canvas.mpl_connect('button_press_event', self._call_pixel_time_sequence)
         elif self.visualization_library == 'bokeh':
+            xdr = DataRange1d(bounds=None)
+            ydr = DataRange1d(bounds=None)    
             if not fig:
-                fig = plk.figure(tooltips=[("x", "$x"), ("y", "$y"), ("switch", "@image")], match_aspect=True,
-                                plot_width=self.dimY, plot_height=self.dimX, tools='pan,box_zoom,reset',
-                                title=title, title_location='above')
-                fig.x_range.range_padding = fig.y_range.range_padding = 0
-                fig.renderers = []
+                fig = plk.figure(x_range=xdr, y_range=ydr,
+                                tooltips=[("x", "$x"), ("y", "$y"), ("switch", "@image")], match_aspect=True,
+                                plot_width=self.dimY, plot_height=self.dimX, tools='pan,box_zoom,reset')
+                xlabel_pos = self.dimY - len(title)*12 - 3
+                _title = Label(x=xlabel_pos, y=self.dimX * 0.9, text=title,render_mode='css',
+                                background_fill_color='black', background_fill_alpha=1.0,
+                                text_font_size='12px', text_color='white')
+                fig.add_layout(_title)
+                #fig.x_range.range_padding = fig.y_range.range_padding = 0
+                #fig.renderers = []
             fig.image(image=[np.flipud(data)],  x=0, y=0, dw=self.dimY, dh=self.dimX, palette=colorMap)
-            xticker = bkm.BasicTicker()
-            if xax:
-                xaxis = bkm.LinearAxis()
-                #xaxis.axis_label = xname
-                fig.add_layout(xaxis, 'below')
-                xticker = xaxis.ticker
-            fig.add_layout(bkm.Grid(dimension=0, ticker=xticker))
-
-            yticker = bkm.BasicTicker()
-            if yax:
-                yaxis = bkm.LinearAxis()
-                #yaxis.axis_label = yname
-                yaxis.major_label_orientation = 'vertical'
-                fig.add_layout(yaxis, 'left')
-                yticker = yaxis.ticker
-            fig.add_layout(bkm.Grid(dimension=1, ticker=yticker))
-
 
             #fig.add_tools(bkm.PanTool(), bkm.WheelZoomTool(), bkm.BoxSelectTool(), bkm.BoxZoomTool(),
             #      bkm.LassoSelectTool(), bkm.PanTool(), bkm.WheelZoomTool(), bkm.SaveTool(), bkm.ResetTool())
@@ -897,7 +892,7 @@ class StackImages:
             #mapper = linear_cmap(field_name='edges', palette=palette ,low=edges[1],high=edges[-1])
             
             fig.quad(top=hist,bottom=0, left=edges[:-1], right=edges[1:],
-                    fill_color=self._colorMap, 
+                    fill_color=self._colorMap[:len(edges)-1], 
                     #fill_color = self._colorMap,
                     line_color="white", alpha=1)
             fig.y_range.start = 0
@@ -1711,8 +1706,11 @@ class StackImages:
                         invert_y_axis=True, step_image=1,
                         consider_events_around_a_central_domain=True,
                         initial_domain_region=None, remove_bordering=False,
-                        plot_centers_of_mass = False, 
-                        color_center_of_mass='k', reference=None,
+                        plot_centers_of_mass = False, size_dots=10,
+                        center_of_mass_scaling = 1,
+                        microns_per_pixel = 1.33, 
+                        max_n_images = 1000,
+                        color_center_of_mass='black', reference=None,
                         rescale_area=False, plot_rays=False,
                         fig=None, ax=None, title=None):
         """
@@ -1740,46 +1738,51 @@ class StackImages:
                 if ax is None:
                     ax = fig.gca()
         elif self.visualization_library == 'bokeh':
-            fig = plk.figure(title=title)
+            if rescale_area:
+                fig = plk.figure(title=title, plot_width=self.dimY, plot_height=self.dimX)
+            else:
+                fig = plk.figure(plot_width=self.dimY, plot_height=self.dimX)
+                xlabel_pos = self.dimY - len(title) * 12 - 3
+                _title = Label(x=xlabel_pos, y=self.dimX * 0.9, text=title,render_mode='css',
+                                background_fill_color='white', background_fill_alpha=1.0,
+                                text_font_size='12px', text_color='black')
+                fig.add_layout(_title)
+            magma = palettes.magma(int(max_n_images))
         # Initialization
         self.contours = {}
-        self.bubbles = {}
+        self.central_domain = {}
         self.centers_of_mass = {}
         # find the initial domain
         self.domain = Domains(self._switchTimes2D)
         central_domain = self.domain.get_initial_domain(is_remove_small_holes=False)
         size_central_domain = np.sum(central_domain)
+        size_central_domain0 = size_central_domain
         yc, xc = nd.measurements.center_of_mass(central_domain)
         #cnts0 = measure.find_contours(central_domain, 0.5, 'high')[0]
         cnts0 = self._get_contours(central_domain, longest=True)
         self.contours[0] = cnts0
-        self.bubbles[0] = central_domain
+        self.central_domain[0] = central_domain
         self.centers_of_mass[0] = (yc, xc)
         # Rescale the area if needed
-        if rescale_area:
-            scaling = size_central_domain**0.5
-        else:
-            scaling = 1.
+        scaling = 1.
         # Plot the central domain
         X, Y = cnts0[:, 1], cnts0[:, 0]
+        if invert_y_axis:
+                Y = self.imHeight - Y
+                yc = self.imHeight - yc
         # Plot the center of mass of the nucleated domain
         if reference == 'center_of_mass':
-            X, Y = (X - xc) / scaling, (Y - yc) / scaling
-            _x, _y = 0, 0
+            X, Y = (X - xc) / scaling + xc, (Y - yc) / scaling + yc
         else:
             X, Y = X / scaling, Y / scaling
-            _x, _y = xc, yc
-
+        
         # The nucleated domain is always black
         if self.visualization_library == 'mpl':
-            ax.plot(_x, _y, 'o', color=color_center_of_mass)
+            ax.plot(xc, yc, 'o', color=color_center_of_mass)
             ax.plot(X, Y, 'k', antialiased=True, lw=2)
         elif self.visualization_library == 'bokeh':
-            if invert_y_axis:
-                _y = self.imHeight - _y
-                Y = self.imHeight - Y
-            fig.circle(_x, _y, size=12, color=color_center_of_mass)
-            fig.line(X, Y, line_width=1, line_color='black')
+            fig.circle(xc, yc, size=size_dots, color=color_center_of_mass)
+            fig.line(X, Y, line_width=2, line_color='black')
 
         
         self.sw = self.domain.sw[:self.domain.max_switch]
@@ -1825,20 +1828,22 @@ class StackImages:
             #         ecc = properties.eccentricity
             #print(ecc)
             y,x = nd.measurements.center_of_mass(central_domain)
-            self.bubbles[switch] = central_domain
+            self.central_domain[switch] = central_domain
             self.centers_of_mass[switch] = (y, x)
-            # n_images = len(self.sw)
-            # n = float(switch - self.sw[0])
-            # clr = getKoreanColors(n, n_images)
-            # #print(n, clr)
-            # clr = tuple([c / 255. for c in clr])
-            if plot_centers_of_mass and reference is None:
+        
+            n = float(switch - self.sw[0])
+            clr = getKoreanColors(n, max_n_images)
+            clr = tuple([c / 255. for c in clr])
+            if plot_centers_of_mass:
                 if self.visualization_library == 'mpl':
-                    ax.plot(x, y, 'o', c=color_center_of_mass)
+                    ax.plot(x-xc, y-yc, 'o', c=clr)
                 elif self.visualization_library == 'bokeh':
+                    #c = colors.to_hex(clr)
                     if invert_y_axis:
                         y = self.imHeight - y
-                    fig.circle(x, y, size=12, color=color_center_of_mass)
+                    _yc = center_of_mass_scaling * (y - yc) + yc
+                    _xc = center_of_mass_scaling * (x - xc) + xc
+                    fig.circle(_xc, _yc, size=size_dots, color=magma[int(n)])
             try:
                 #cnts = measure.find_contours(central_domain*1,.5, 'high')[0]
                 cnts = self._get_contours(central_domain, longest=True)
@@ -1847,32 +1852,31 @@ class StackImages:
                 print("There is a problem with the contour of image n. {}".format(switch))
                 break
             # TODO: the contour changes drastically when two walls merge. How to fix it?
-            self.contours[switch] = cnts 
+            self.contours[switch] = cnts
             if not k%step_image:
                 if rescale_area:
-                    scaling = size_central_domain**0.5
+                    scaling = (size_central_domain/size_central_domain0)**0.5
                     lw = 1.
                 else:
-                    scaling = 1.
+                    scaling = 1
                     lw = 0.5
                 X,Y = cnts[:,1], cnts[:,0]
+                if invert_y_axis:
+                        Y = self.imHeight - Y
                 if reference == 'center_of_mass':
-                    X, Y = (X-x)/scaling, (Y-y)/scaling
+                    X, Y = (X-x) / scaling + xc, (Y-y) / scaling + yc
                 else:
-                    X, Y = X/scaling, Y/scaling
+                    X, Y = X / scaling, Y / scaling
                 if lines_color is not None:
                     _lines_color = lines_color
                 else:
-                    n_images = len(self.sw)
                     n = float(switch - self.sw[0])
-                    clr = getKoreanColors(n, n_images)
+                    clr = getKoreanColors(n, self.max_n_images)
                     clr = tuple([c / 255. for c in clr])
                     _lines_color = clr
                 if self.visualization_library == 'mpl':
                     ax.plot(X,Y,_lines_color,antialiased=True,lw=lw)
                 elif self.visualization_library == 'bokeh':
-                    if invert_y_axis:
-                        Y = self.imHeight - Y
                     fig.line(X,Y,line_color=lines_color, line_width=lw)
 
 
@@ -1904,70 +1908,46 @@ class StackImages:
                 ax.set_title(title, fontdict={'fontsize': 'medium'})
             ax.axis('equal')
             plt.show()
+        elif self.visualization_library == 'bokeh':
+            fig.xaxis.axis_label = "pixels"
+            fig.yaxis.axis_label = "pixels"
+             # Create 2nd
+            #fig.extra_y_ranges['y_left'] = fig.y_range * microns_per_pixel
+            #fig.extra_x_ranges['x_above'] = fig.x_range * microns_per_pixel
+            #fig.add_layout(LinearAxis(y_range_name='y_left', axis_label='microns'), 'right')
+            #fig.add_layout(LinearAxis(x_range_name='x_above', axis_label='microns'), 'above')
+
         self.is_plotContours = True
         return fig
         
-    def rescale_contours(self,invert_y_axis=True,fig=None,ax=None):
-        if not self.is_plotContours:
-            print("Please, run plotContours first")
-            return
-        if fig is None:
-            fig = plt.figure(figsize=self._figColorImage.get_size_inches())
-            ax = fig.gca()
-        else:
-            plt.figure(fig.number)
-            if ax is None:
-                ax = fig.gca()
-        switches = sorted(self.bubbles.keys())
-        rescale_factors = {}
-        area0 = float(np.sum(self.bubbles[switches[-1]]))
-        print(area0)
-        for switch in switches[:-1]:
-            resize_factor = (np.sum(self.bubbles[switch])/area0)**0.5
-            print(resize_factor)
-            yc,xc = self.centers_of_mass[switch]
-            axs = (-xc,self.dimY-xc,self.dimX-yc,-yc)
-            cnts = self.contours[switch]
-            X,Y = (cnts[:,1]-xc)/resize_factor, (cnts[:,0]-yc)/resize_factor
-            ax.plot(X,Y,antialiased=True,lw=1,label=switch)
-        if invert_y_axis:
-            ax.invert_yaxis()
-            ax.legend(bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0.)
-        return
-
-
-    # def waiting_times_map(self, is_plot=True, log_norm=True):
-    #     """
-    #     calculate and plot the waiting time matrix
-    #     """
-    #     from matplotlib.colors import LogNorm
-    #     if not self.is_find_contours:
-    #         print("You have to run find_contours first")
-    #     x_points = np.array([])
-    #     y_points = np.array([])
-    #     # Collect the x and y of the contours
-    #     for k in self.contours:
-    #         cnt = self.contours[k]
-    #         x, y = cnt[:,0], cnt[:,1]
-    #         x_points = np.append(x, x_points)
-    #         y_points = np.append(y, y_points)
-    #     n_images, rows, cols = self.shape
-    #     bins = (np.arange(0,rows,.5), np.arange(0,cols,.5))
-    #     waiting_times_hist, xedges, yedges = np.histogram2d(x_points, y_points, bins=bins)
-    #     wt_masked = np.ma.masked_where(waiting_times_hist==0, waiting_times_hist)
-    #     if is_plot:
-    #         if log_norm:
-    #             norm = LogNorm()
-    #         else:
-    #             norm = 'None'
-    #         fig1 = plt.figure()
-    #         plt.imshow(waiting_times_hist,extent=[yedges[-1], yedges[0], xedges[0], xedges[-1]], 
-    #             norm=norm, interpolation='nearest')
-    #         fig2 = plt.figure()
-    #         plt.imshow(wt_masked,extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]], 
-    #             norm=norm, interpolation='nearest')
-    #     self.waiting_times_hist = waiting_times_hist
+    # def rescale_contours(self,invert_y_axis=True,fig=None,ax=None):
+    #     if not self.is_plotContours:
+    #         print("Please, run plotContours first")
+    #         return
+    #     if fig is None:
+    #         fig = plt.figure(figsize=self._figColorImage.get_size_inches())
+    #         ax = fig.gca()
+    #     else:
+    #         plt.figure(fig.number)
+    #         if ax is None:
+    #             ax = fig.gca()
+    #     switches = sorted(self.central_domain.keys())
+    #     rescale_factors = {}
+    #     area0 = float(np.sum(self.central_domain[switches[-1]]))
+    #     print(area0)
+    #     for switch in switches[:-1]:
+    #         resize_factor = (np.sum(self.central_domain[switch])/area0)**0.5
+    #         print(resize_factor)
+    #         yc,xc = self.centers_of_mass[switch]
+    #         axs = (-xc,self.dimY-xc,self.dimX-yc,-yc)
+    #         cnts = self.contours[switch]
+    #         X,Y = (cnts[:,1]-xc)/resize_factor, (cnts[:,0]-yc)/resize_factor
+    #         ax.plot(X,Y,antialiased=True,lw=1,label=switch)
+    #     if invert_y_axis:
+    #         #ax.invert_yaxis()
+    #         ax.legend(bbox_to_anchor=(1.01, 1), loc=2, borderaxespad=0.)
     #     return
+
 
     def waiting_times_map(self, is_plot=True, log_norm=True):
         """

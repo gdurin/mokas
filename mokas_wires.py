@@ -151,12 +151,13 @@ class Wires(StackImages):
         from both sides
         """
         gray_profile = np.mean(im, 0)
-        L2 = len(gray_profile) / 2
+        L2 = len(gray_profile) // 2
         p1 = np.argmin(gray_profile[:L2])
         p2 = np.argmin(gray_profile[L2:]) + L2
         distance = p2 - p1
         p1 += distance * self.edge_trim_percent / 100
         p2 -= distance * self.edge_trim_percent / 100
+        p1, p2 = int(p1), int(p2)
         # out_mean1 = np.mean(gray_profile[:L2/5])
         # out_mean2 = np.mean(gray_profile[-L2/5:])
         # p1 += np.argmax(gray_profile[p1:L2] - out_mean1 > 0) 

@@ -28,7 +28,11 @@ class Domains:
         sw = np.unique(switch2D)
         self.sw = sw[sw != no_switch_value]
         self.switch2D = switch2D
-        self.switched_domain = switch2D >= self.sw[0]
+        try:
+            self.switched_domain = switch2D >= self.sw[0]
+        except:
+            print("Error in the number of switches. It is likely you cropped the image too much")
+            sys.exit()
         if is_remove_small_holes:
             self.switched_domain = remove_small_holes(~self.switched_domain, small_holes_area)
             self.switched_domain = ~self.switched_domain
@@ -173,7 +177,7 @@ class Domains:
                 return switch
 
 if __name__ == "__main__":
-    filename = "switch2D_05.pkl"
+    filename = "/data/src_backup/pyAvalanches/switch2D_05.pkl"
     with open(filename, 'rb') as f:
         switch2D = pickle.load(f)
     domain = Domains(switch2D)

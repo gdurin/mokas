@@ -61,7 +61,7 @@ def get_rays(center,step_angle,ax,axis_limits=None):
         #ax.plot((xc,xc),(ymin,ymax),'k--',lw=0.5)
         return data
 
-def calc_velocity(contours,origin,n_new_thetas=720,swope_xy=True):
+def calc_velocity(contours,origin,delta_t=1.,n_new_thetas=720,swope_xy=True):
 	"""
 	Calculated the velocity given a set of contours, an origin and the angles 
 
@@ -74,7 +74,6 @@ def calc_velocity(contours,origin,n_new_thetas=720,swope_xy=True):
 	n_new_thetas : n. of angles uniformly spaced along 360 degrees
 	"""
 	switches = sorted(contours.keys())
-	delta_t = 1.
 	new_thetas = np.linspace(-np.pi,np.pi,n_new_thetas)
 	for switch in switches:
 		r, theta = cart2polar(contours[switch],origin,swope_xy=swope_xy)
@@ -88,7 +87,7 @@ def calc_velocity(contours,origin,n_new_thetas=720,swope_xy=True):
 				v = v_ist
 			else:
 				v = np.vstack((v,v_ist))
-	times = (switches[1:] - switches[1]) / delta_t
+	times = (switches[1:] - switches[1]) * delta_t
 	v = pd.DataFrame(v,columns=new_thetas,index=times)
 	return v
 
@@ -129,9 +128,9 @@ def plot_mean_velocity(x,v_mean,v_err,fig=None,ax=None,title=None,label=None,col
 
 
 def plot_displacement(contours,origin,reference='nucleated_domain',
-					n_new_thetas=720,swope_xy=True,
+					n_new_thetas=25,swope_xy=True,
 					fig=None,ax=None,title=None,step_in_frames=10,
-					is_colors=False,
+					is_colors=False, microns_per_pixel=1,
 					visualization_library='mpl'):
 	"""
 	Plot dispacements at different angles
@@ -169,9 +168,10 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 	new_thetas = np.linspace(-np.pi,np.pi,n_new_thetas)
 	for switch in switches:
 		r, theta = cart2polar(contours[switch],origin,swope_xy=swope_xy)
+		r *= microns_per_pixel
 		frame = switch - switches[0]
 		lw = 1.5*(frame%step_in_frames==0) + 0.5
-		if reference is not 'center':
+		if reference != 'center':
 			new_r = np.interp(new_thetas,theta,r)
 			if switch == 0:
 				r0 = new_r
@@ -190,9 +190,9 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 
 	xaxis_label = "angle (deg)"
 	if reference == 'nucleated_domain':
-		distance_label = "distance from the nucleated domain"
+		distance_label = "distance from the domain (um)"
 	else:
-		distance_label = "distance from the center"	
+		distance_label = "distance from the center (um)"	
 
 	if visualization_library == 'mpl':
 		ax.grid(True)
@@ -208,7 +208,7 @@ def plot_displacement(contours,origin,reference='nucleated_domain',
 	# return the last contour
 	# and the n. of frames between the first and the last switches
 	frames = switches[-1] - switches[1] + 1
-	if reference is not 'center':
+	if reference != 'center':
 		return fig, new_thetas, delta_r, frames
 	else:
 		return fig, theta, r, frames
