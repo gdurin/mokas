@@ -4,6 +4,7 @@ backup/
 contours/
 videos.py
 *.pkl
+*.html
 *.ipynb
 *.txt
 mokas_env/
