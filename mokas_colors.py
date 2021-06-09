@@ -61,7 +61,7 @@ def get_cmap(N, cmap='hsv'):
     map_index_to_rgb_color = [[int(col[0]*255),int(col[1]*255),int(col[2]*255)] for col in pColor]
     return map_index_to_rgb_color
 
-def get_colors(num_colors, palette='hue', norm=False, 
+def get_colors(num_colors, palette='pastel', norm=False, 
                 visualization_library='mpl'):
     """
     for bokeh
@@ -87,6 +87,9 @@ def get_colors(num_colors, palette='hue', norm=False,
             colors = get_cmap(num_colors, palette)
             #colors = np.vstack((black,colors))
         elif visualization_library == 'bokeh':
+            _num_colors = num_colors
+            if _num_colors > 256:
+                num_colors = 256
             if palette == 'magma':
                 colors = palettes.magma(num_colors)
             elif palette == 'inferno':
@@ -95,6 +98,9 @@ def get_colors(num_colors, palette='hue', norm=False,
                 colors = palettes.cividis(num_colors)
             elif palette == 'viridis':
                 colors = paletters.viridis(num_colors)
+            # Check if larger than 256
+            colors = (_num_colors//256) * colors + colors[:_num_colors%256]
+
     if visualization_library == 'mpl' and norm:
         colors = colors/255.
     return colors

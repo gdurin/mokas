@@ -9,6 +9,7 @@ import scipy.ndimage as nd
 from skimage.morphology import remove_small_holes
 from skimage.draw import line_aa, line
 import matplotlib.pyplot as plt
+import sys
 
 SPACE = "###"
 NNstructure = np.array([[0,1,0],[1,1,1],[0,1,0]])

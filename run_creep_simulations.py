@@ -1,5 +1,6 @@
 import os
 from run_creep import Creep 
+import sys
 
 def isIniFile(filename):
 	return os.path.isfile(filename)

@@ -1,5 +1,6 @@
 #import pycuda.autoinit
 import pycuda.driver as driver
+import sys
 
 def gpu_init(device=0, fraction_to_use=0.95, verbose=False):
     try:

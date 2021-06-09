@@ -152,7 +152,7 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 10, 
-                 #kernel_sign = -1,
+                 kernel_sign=None,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
@@ -205,9 +205,6 @@ class StackImages:
         self.exclude_switches_out_of_final_domain = exclude_switches_out_of_final_domain
         self.erase_small_events_percent = erase_small_events_percent
         self.visualization_library = visualization_library
-
-        (x0, y0), (x1, y1) = imCrop
-        self.imWidth, self.imHeight = (x1-x0), (y1 -y0) 
         
         # Check paths
         if not os.path.isdir(self._mainDir):
@@ -228,7 +225,17 @@ class StackImages:
         self.n_images, self.dimX, self.dimY = self.shape
         print("%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY))
 
-        self.multiplier = self._get_multiplier('bubble')
+        if imCrop is None:
+            self.imWidth, self.imHeight = self.dimX, self.dimY
+        else:
+            (x0, y0), (x1, y1) = imCrop
+            self.imWidth, self.imHeight = (x1-x0), (y1 -y0) 
+
+        if kernel_sign is None:
+            self.multiplier = self._get_multiplier('bubble')
+        else:
+            self.multiplier = kernel_sign
+
         self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
@@ -1747,7 +1754,12 @@ class StackImages:
                                 background_fill_color='white', background_fill_alpha=1.0,
                                 text_font_size='12px', text_color='black')
                 fig.add_layout(_title)
-            magma = palettes.magma(int(max_n_images))
+            if max_n_images > 256:
+                magma = palettes.magma(256)
+                i, j = max_n_images//256, max_n_images%256
+                magma = i * magma + magma[:j]
+            else:
+                magma = palettes.magma(int(max_n_images))
         # Initialization
         self.contours = {}
         self.central_domain = {}

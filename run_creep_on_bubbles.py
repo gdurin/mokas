@@ -235,7 +235,11 @@ class Creep:
 				_fig1, _fig2, _fig3, _fig4, _fig5, _fig6, _fig7 = n_bokeh_plots * [None]
 				_ax1, _ax2, _ax3, _ax4, _ax5, _ax6, _ax7 = n_bokeh_plots * [None]
 				_ax7 = [_ax7, _ax7]
-				(x0, y0), (x1, y1) = self.imParameters['imCrop']
+
+				if(self.imParameters['imCrop'] is not None):
+					(x0, y0), (x1, y1) = self.imParameters['imCrop']
+				else:
+					x0, y0, x1, y1 = 0, 0, imArray.imWidth, imArray.imHeight
 
 				
 			# Figure 1 : color Image of DW motion
@@ -358,7 +362,7 @@ class Creep:
 		v_err = self.velocities_error
 		#v.index = v.index * 180 / np.pi
 		#v.index = v.index.astype(int)
-		v.index = np.linspace(-180,180, n_alphas																																																																																																																																																																																																																																																																																																																																																																																																		)
+		v.index = np.linspace(-180,180, n_alphas)
 		v_err.index = v_err.index
 		i_shift = int((n_alphas - 1) / 2)
 		cl = get_colors(i_shift+1,'magma',True,visualization_library=visualization_library)[1:]
@@ -376,7 +380,7 @@ class Creep:
 				#print("Color %s" % cl[i])
 				fig7a = mkb.plot_errorbar(v.columns, v.iloc[i], v_err.iloc[i], labels, color=cl[i], size=5, fig=fig7a) 
 				label = "{} deg".format(v.index[i+i_shift])
-				figt7b = mkb.plot_errorbar(v.columns, v.iloc[i], v_err.iloc[i], labels, color=cl[i], size=5, fig=fig7b) 
+				fig7b = mkb.plot_errorbar(v.columns, v.iloc[i], v_err.iloc[i], labels, color=cl[i], size=5, fig=fig7b) 
 		
 		if visualization_library == 'mpl':
 			for i in range(2):
