@@ -381,7 +381,7 @@ class StackImages:
         step = self._switchSteps2D[row, col]
         # Plot the step-like function
         l0 = self.kernel_half_width_of_ones
-        pxt_average = np.mean(pxt[switch - l0/2:switch + l0 + 1]) # to check
+        pxt_average = np.mean(pxt[switch - l0//2:switch + l0 + 1]) # to check
         print("switch at %i, gray level change = %i" % (switch, step))
         kernel0 = -self.multiplier * np.ones(self.kernel_half_width_of_ones)
         kernel0 = np.concatenate((kernel0, -kernel0))

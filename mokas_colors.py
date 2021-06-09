@@ -50,7 +50,7 @@ def get_liza_colors(color='green', whiter=0.6):
     return clrs, mpl_colors.ListedColormap(clrs,'liza_'+color)
 
 
-def get_cmap(N, cmap='hsv'):
+def get_cmap(N, cmap='hsv', norm=False):
     """Returns a function that maps each index 
     in 0, 1, ... N-1 to a distinct RGB color.
     http://stackoverflow.com/questions/14720331/how-to-generate-random-colors-in-matplotlib
@@ -58,7 +58,11 @@ def get_cmap(N, cmap='hsv'):
     color_norm  = mpl_colors.Normalize(vmin=0, vmax=N-1)
     scalar_map = cm.ScalarMappable(norm=color_norm, cmap=cmap) 
     pColor = [scalar_map.to_rgba(i)[:3] for i in range(N)]
-    map_index_to_rgb_color = [[int(col[0]*255),int(col[1]*255),int(col[2]*255)] for col in pColor]
+    if norm:
+        norm_factor = 1
+    else:
+        norm_factor = 255
+    map_index_to_rgb_color = [[col[0]*norm_factor,col[1]*norm_factor,col[2]*norm_factor] for col in pColor]
     return map_index_to_rgb_color
 
 def get_colors(num_colors, palette='pastel', norm=False, 
@@ -84,7 +88,7 @@ def get_colors(num_colors, palette='pastel', norm=False,
         colors = (np.random.randint(0, 256, (num_colors,3)) + white) / 2
     else:
         if visualization_library == 'mpl':
-            colors = get_cmap(num_colors, palette)
+            colors = get_cmap(num_colors, palette, norm)
             #colors = np.vstack((black,colors))
         elif visualization_library == 'bokeh':
             _num_colors = num_colors
@@ -101,8 +105,6 @@ def get_colors(num_colors, palette='pastel', norm=False,
             # Check if larger than 256
             colors = (_num_colors//256) * colors + colors[:_num_colors%256]
 
-    if visualization_library == 'mpl' and norm:
-        colors = colors/255.
     return colors
 
 def getKoreanColors(i, n):
