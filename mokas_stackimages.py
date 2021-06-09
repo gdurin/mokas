@@ -152,7 +152,7 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 10, 
-                 #kernel_sign = -1,
+                 kernel_sign = -1,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
@@ -228,7 +228,10 @@ class StackImages:
         self.n_images, self.dimX, self.dimY = self.shape
         print("%i image(s) loaded, of %i x %i pixels" % (self.n_images, self.dimX, self.dimY))
 
-        self.multiplier = self._get_multiplier('bubble')
+        if kernel_sign is None:
+            self.multiplier = self._get_multiplier('bubble')
+        else:
+            self.multiplier = kernel_sign
         self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
