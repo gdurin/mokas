@@ -37,7 +37,7 @@ class Images:
 
     Parameters:
     ----------------
-    root_ir : string
+    root_dir : string
         Directory of the image file(s)
 
     pattern : string
