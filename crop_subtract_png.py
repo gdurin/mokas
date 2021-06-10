@@ -38,10 +38,14 @@ def moving_average(dictArray):
 	return arrayAverage/len(dictArray)
 
 
-def save_img(array, filename, saveDir):
+def save_img(array, i, filename, saveDir, renameImages=None):
 	img = Image.fromarray(array.astype(np.uint8))
-	base, ext = os.path.splitext(os.path.basename(file))
-	savePath = os.path.join(saveDir, base + ".png")
+	if renameImages is None:
+		base, ext = os.path.splitext(os.path.basename(file))
+		savePath = os.path.join(saveDir, base + ".png")
+	else:
+		base, ext = renameImages
+		savePath = os.path.join(saveDir, base + "%05d" % (i, ) + ext)
 	img.save(savePath)
 
 
@@ -60,13 +64,16 @@ if __name__ == "__main__":
 	# TODO : True doesn't work (Why ?)
 	keep_all_images = False #If False, for each n_average image we save only one image : the average of the last n_average images
 
-	inverted = True
+	inverted = False
 
 	#None for no filtering
 	gauss_radius = 1.5
 
 	#(0, 255) for nothing
 	gray_level = (110, 145)
+
+	#None for no renaming
+	renameImages = ("seq1_", ".png")
 
 
 
@@ -87,6 +94,7 @@ if __name__ == "__main__":
 		backgroundArray = None
 
 	lastArrays = {}
+	count = 0
 
 	for i, file in enumerate(sorted(filenames)):
 
@@ -98,4 +106,5 @@ if __name__ == "__main__":
 
 		if(keep_all_images or i%n_average == n_average-1):
 			array = moving_average(lastArrays)
-			save_img(array, file, saveDir)
+			save_img(array, count, file, saveDir, renameImages)
+			count += 1

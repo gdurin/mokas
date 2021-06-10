@@ -26,6 +26,7 @@ import mokas_gpu as mkGpu
 from mokas_domains import Domains
 import pickle
 from skimage import measure
+import warnings
 
 try:
     #from bokeh.models import (BasicTicker, Circle, ColumnDataSource, DataRange1d,
@@ -152,7 +153,7 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 10, 
-                 kernel_sign = -1,
+                 kernel_sign = None, #Needed !
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,
@@ -176,7 +177,7 @@ class StackImages:
         self._isSwitchAndStepsDone = False
         self._isDistributions = False
         self._switchTimes = None
-        self._threshold = 0
+        self._threshold = None
         self._figTimeSeq = None
         self.figDiffs = None
         self._figHistogram = None
@@ -232,33 +233,36 @@ class StackImages:
             self.imWidth, self.imHeight = (x1-x0), (y1 -y0) 
 
         if kernel_sign is None:
-            self.multiplier = self._get_multiplier('bubble')
+            self.multiplier = 1
+            self.isMultiplierSetByUser = False
         else:
             self.multiplier = kernel_sign
+            self.isMultiplierSetByUser = True
+
         self.convolSize = kernel_half_width_of_ones
         # Make a kernel as a step-function
         self.kernel_half_width_of_ones = kernel_half_width_of_ones
         self.visualization_library = visualization_library
         
 
-    def _get_multiplier(self, method='average_gray'):
-        """
-        multiplier is +1 if -1 -> +1
-        multiplier is -1 if +1 -> -1
-        The method below is only valid for bubbles
-        TODO: make it as a specific method of the subclasses (bubbles, wires, labyrinths)
-        """
-        if method == 'average_gray':
-            grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
-            grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
-            print("grey scale: %i, %i" % (grey_first_image, grey_last_image))
-            if grey_first_image > grey_last_image:
-                return 1.
-            else:
-                return -1.
-        elif method == 'bubble':
-            #im = self.Array[-1]
-            return -1
+    # def _get_multiplier(self, method='average_gray'):
+    #     """
+    #     multiplier is +1 if -1 -> +1
+    #     multiplier is -1 if +1 -> -1
+    #     The method below is only valid for bubbles
+    #     TODO: make it as a specific method of the subclasses (bubbles, wires, labyrinths)
+    #     """
+    #     if method == 'average_gray':
+    #         grey_first_image = np.mean([scipy.mean(self.Array[k,:,:].flatten()) for k in range(4)])
+    #         grey_last_image = np.mean([scipy.mean(self.Array[-k,:,:].flatten()) for k in range(1,5)])
+    #         print("grey scale: %i, %i" % (grey_first_image, grey_last_image))
+    #         if grey_first_image > grey_last_image:
+    #             return 1.
+    #         else:
+    #             return -1.
+    #     elif method == 'bubble':
+    #         #im = self.Array[-1]
+    #         return -1
 
     def __get__(self):
         """
@@ -381,7 +385,7 @@ class StackImages:
         step = self._switchSteps2D[row, col]
         # Plot the step-like function
         l0 = self.kernel_half_width_of_ones
-        pxt_average = np.mean(pxt[switch - l0//2:switch + l0 + 1]) # to check
+        pxt_average = np.mean(pxt[switch - l0:switch + l0]) # to check
         print("switch at %i, gray level change = %i" % (switch, step))
         kernel0 = -self.multiplier * np.ones(self.kernel_half_width_of_ones)
         kernel0 = np.concatenate((kernel0, -kernel0))
@@ -517,7 +521,7 @@ class StackImages:
             imageFileName = os.path.join(dirSeq, fileName)
             imPIL.save(imageFileName)
 
-    def getSwitchTimesAndSteps(self, isCuda=True, kernel=None, device=0):
+    def getSwitchTimesAndStepsAndThresholdAndMultiplier(self, isCuda=True, kernel=None, device=0, threshold=None, showHist=True):
         """
         Calculate the switch times and the gray level changes
         for each pixel in the image sequence.
@@ -544,27 +548,35 @@ class StackImages:
             print("Total memory to be used: %.2f GB" % (need_mem/1e9))
             current_dev, ctx, (free_mem_gpu, total_mem_gpu) = mkGpu.gpu_init(device)
             if need_mem < free_mem_gpu:
-                switchTimes, switchSteps = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
+                switchTimesMin, switchStepsMin, switchTimesMax, switchStepsMax = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
             else:
                 nsplit = int(float(need_mem)/free_mem_gpu) + 1
                 print("Splitting images in %d parts..." % nsplit)
                 stack32s = np.array_split(stack32, nsplit, 1)
                 print("Done")
-                switchTimes = np.array([])
-                switchSteps = np.array([])
+                switchTimesMin = np.array([])
+                switchStepsMin = np.array([])
                 for k, stack32 in enumerate(stack32s):
                     print("Calculation split %i" % k)
                     #a = stack32.astype(np.int32)
-                    switch, step = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
+                    switch, step, switchMax, stepMax = get_gpuSwitchTime(stack32, self.convolSize,self.multiplier, current_dev, ctx)
                     if not k:
-                        switchTimes = switch
-                        switchSteps = step
+                        switchTimesMin = switch
+                        switchStepsMin = step
+                        switchTimesMax = switchMax
+                        switchStepsMax = stepMax
                     else:
-                        switchTimes = np.vstack((switchTimes, switch))
-                        switchSteps = np.vstack((switchSteps, step))
-            self._switchSteps = switchSteps.flatten()
+                        switchTimesMin = np.vstack((switchTimesMin, switch))
+                        switchStepsMin = np.vstack((switchStepsMin, step))
+                        switchTimesMax = np.vstack((switchTimesMax, switchMax))
+                        switchStepsMax = np.vstack((switchStepsMax, stepMax))
+
+            switchStepsMin = switchStepsMin.flatten()
+            switchStepsMax = switchStepsMax.flatten()
             # Add the value of the first image
-            self._switchTimes = self.imageNumbers[0] + switchTimes.flatten()
+            switchTimesMin = self.imageNumbers[0] + switchTimesMin.flatten()
+            switchTimesMax = self.imageNumbers[0] + switchTimesMax.flatten()
+
             # Close device properly
             success = mkGpu.gpu_deinit(current_dev, ctx)
             if not success:
@@ -593,6 +605,52 @@ class StackImages:
             # This problem must be solved out this method
             self._switchTimes = np.asarray(switchTimes)
             self._switchSteps = np.asarray(switchSteps)
+
+
+        # Below : Calculates the threshold and the multiplier
+        # It is necessary to calculate it just after get_gpuSwitchTime because
+        # we need both switchStepsMin and switchStepsMax to calculate the multiplier
+
+        if showHist:
+            plt.hist(np.concatenate([switchStepsMin, switchStepsMax]), bins=100)
+            plt.show()
+
+
+        mean_mins_convol = abs(np.mean(switchStepsMin))
+        mean_maxs_convol = abs(np.mean(switchStepsMax))
+
+        if(mean_mins_convol > mean_maxs_convol):
+            estimated_threshold = mean_mins_convol
+            print("Estimated threshold : ", estimated_threshold)
+            print("Estimated multiplier :", self.multiplier) #If the negative ("min") levels have a greater average than the positive ones ("max"), we chose the right multiplier
+
+            if not self.isMultiplierSetByUser:
+                print("Multiplier set to", self.multiplier)
+
+            self._switchSteps = np.abs(switchStepsMin)
+            self._switchTimes = switchTimesMin
+        else:
+            estimated_threshold = mean_maxs_convol
+            print("Estimated threshold : ", estimated_threshold)
+            print("Estimated multiplier :", -self.multiplier) #Otherwise, we chose the wrong one => we have to change (change made if multiplier was not defined by the user only)
+            
+            if self.isMultiplierSetByUser:
+                warnings.warn("You may have chosen the wrong multiplier")
+                self._switchSteps = np.abs(switchStepsMin)
+                self._switchTimes = switchTimesMin
+            else:
+                self.multiplier *= -1
+                print("Multiplier set to", self.multiplier)
+                self._switchSteps = np.abs(switchStepsMax)
+                self._switchTimes = switchTimesMax
+
+        if threshold is None:
+            self._threshold = estimated_threshold
+            print("Threshold set to", self._threshold)
+        else:
+            self._threshold = threshold
+
+
         self._isColorImage = True
         self._isSwitchAndStepsDone = True
         return
@@ -617,9 +675,8 @@ class StackImages:
         ### 
         #get sigma from hist of images and use it as threshold
         ###
-        if self._threshold is None:
-            self._threshold = int(np.std(self.Array.flatten())*0.1)
-            print("estimated threshold = %d"%self._threshold)
+        
+        #self._setThresholdAndSwitchTimesAndLevels(self._threshold)
 
         self.isPixelSwitched = (self._switchSteps >= self._threshold) & (self._switchTimes > self.kernel_half_width_of_ones)
         maskedSwitchTimes = ma.array(self._switchTimes, mask = ~self.isPixelSwitched)
@@ -631,19 +688,19 @@ class StackImages:
         switchTimesWithFillValue = maskedSwitchTimes.filled(fillValue) # Isn't it fantastic?
         return switchTimesWithFillValue
 
-    def _isColorImageDone(self,ask=True):
-        print("You must first run the getSwitchTimesAndSteps script: I'll do that for you")
+    def _isColorImageDone(self,ask=True, threshold=None):
+        print("You must first run the getSwitchTimesAndStepsAndThresholdAndMultiplier script: I'll do that for you")
         if ask:
             yes_no = raw_input("Do you want me to run the script for you (y/N)?")
             yes_no = yes_no.upper()
             if yes_no != "Y":
                 return
-        self.getSwitchTimesAndSteps()
+        self.getSwitchTimesAndStepsAndThresholdAndMultiplier(threshold=threshold)
         return
 
-    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=None):
+    def _getColorImage(self, palette, noSwitchColor='black', erase_small_events_percent=None, threshold=None):
         """
-        Calculate the color Image using the output of getSwitchTimesAndSteps
+        Calculate the color Image using the output of getSwitchTimesAndStepsAndThresholdAndMultiplier
 
         Parameters:
         ---------------
@@ -660,7 +717,7 @@ class StackImages:
         """
 
         if not self._isSwitchAndStepsDone:
-            self._isColorImageDone(ask=False)
+            self._isColorImageDone(ask=False, threshold=threshold)
 
         self.min_switch = np.min(self._switchTimes)
         self.max_switch = np.max(self._switchTimes)
@@ -734,7 +791,7 @@ class StackImages:
                         xax=False, yax=False):
         """
         Show the calculated color Image of the avalanches.
-        Run getSwitchTimesAndSteps if not done before.
+        Run getSwitchTimesAndStepsAndThresholdAndMultiplier if not done before.
 
         Parameters
         ---------------
@@ -747,14 +804,14 @@ class StackImages:
             background color for pixels having gray_level_change below the threshold
         """
         # set the threshold
-        estimated_threshold = int(np.std(self.Array.flatten())*0.1)
-        print("Estimated threshold = %d" % estimated_threshold)
-        if not threshold:
-            self._threshold = estimated_threshold
-        else:
-            self._threshold = threshold
+        # estimated_threshold = int(np.std(self.Array.flatten())*0.1)
+        # print("Estimated threshold = %d" % estimated_threshold)
+        # if not threshold:
+        #     self._threshold = estimated_threshold
+        # else:
+        #     self._threshold = threshold
         # Calculate the Color Image
-        self._getColorImage(palette, noSwitchColor, erase_small_events_percent)
+        self._getColorImage(palette, noSwitchColor, erase_small_events_percent, threshold)
         # Prepare to plot
         if data is None:
             data = self._switchTimes2D
@@ -941,7 +998,7 @@ class StackImages:
         as calculated by the self._colorImage
         """
         if not self._isColorImage:
-            self._isColorImageDone(ask=False)
+            self._isColorImageDone(ask=False, threshold=self._threshold)
         imDC = (self._switchTimes2D == imageNum) * 1
         if haveColors:
             imDC = scipy.array(imDC, dtype='int16')
@@ -1426,7 +1483,7 @@ class StackImages:
                          "Bottom_to_top","Right_to_left"]
         # Check if color Image is available
         if not self._isColorImage:
-            self._isColorImageDone(ask=False)
+            self._isColorImageDone(ask=False, threshold=threshold)
         switchTimesMasked = self._switchTimes2D
         pixelsUnderMasks = []
         # first identify first 10 avalanches of whole image
@@ -1469,7 +1526,7 @@ class StackImages:
         """          
         # Check if analysis of avalanches has been performed
         if not self._isColorImage:
-            self._isColorImageDone(ask=False)
+            self._isColorImageDone(ask=False, threshold=self._threshold)
         # Initialize variables
         self.D_avalanches = []
         self.D_cluster = scipy.array([], dtype='int32')

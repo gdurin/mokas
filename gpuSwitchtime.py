@@ -36,6 +36,8 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     convolStack = np.zeros((dim_z , dim_y, dim_x), dtype=np.float32)
     switch = np.zeros((dim_y,dim_x), dtype=np.int32)
     levels = np.zeros((dim_y,dim_x), dtype=np.int32)
+    switch_max = np.zeros((dim_y,dim_x), dtype=np.int32)
+    levels_max = np.zeros((dim_y,dim_x), dtype=np.int32)
     convolSize32 = np.int32(convolSize)
     multiplier32 = np.int32(multiplier)
     #Host to Device copy
@@ -48,6 +50,12 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     levels_gpu = to_gpu(levels)
     if verbose:
         print("Level_gpu copied")
+    switch_max_gpu = to_gpu(switch_max)
+    if verbose:
+        print("Switch_max_gpu copied")
+    levels_max_gpu = to_gpu(levels_max)
+    if verbose:
+        print("Level_max_gpu copied")
     convolStack_gpu = to_gpu(convolStack)
     if verbose:
         print("convolStack_gpu copied")
@@ -159,7 +167,7 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
         print("Tokenizing 2")
 
     mod2 = SourceModule("""
-    __global__ void findmin(float *convolStack_gpu, int *switch_gpu, int *levels_gpu, int dim_x, int dim_y, int dim_z)
+    __global__ void findmin(float *convolStack_gpu, int *switch_gpu, int *levels_gpu, int *switch_max_gpu, int *levels_max_gpu, int dim_x, int dim_y, int dim_z)
     {
     int len_kernel_half = 15;
     int idx = threadIdx.x + blockIdx.x * blockDim.x; 
@@ -168,6 +176,7 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
         return;
     int flat_id1 = idx + dim_x * idy ;
     int min=4294967295;
+    int max=-4294967294;
     for(int idz = 0; idz <dim_z; idz++)
       {
         int flat_id = idx + dim_x * idy + (dim_x * dim_y) * idz;      
@@ -176,8 +185,14 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
         min=convolStack_gpu[flat_id];
         switch_gpu[flat_id1]=idz;
         }
+        if(convolStack_gpu[flat_id]>max)
+        {
+        max=convolStack_gpu[flat_id];
+        switch_max_gpu[flat_id1]=idz;
+        }
       }
-        levels_gpu[flat_id1]=abs(min);
+        levels_gpu[flat_id1]=min;
+        levels_max_gpu[flat_id1]=max;
     }
     """)
     # mod2_b = SourceModule("""
@@ -227,7 +242,7 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     if verbose:
         print("Done.")
         print("Ready to find the minimum of convolution")
-    func_findmin(convolStack_gpu, switch_gpu, levels_gpu,  dim_X, dim_Y, dim_Z,  block=(block_X, block_Y, 1),
+    func_findmin(convolStack_gpu, switch_gpu, levels_gpu, switch_max_gpu, levels_max_gpu,  dim_X, dim_Y, dim_Z,  block=(block_X, block_Y, 1),
           grid=(grid_X2, grid_Y2))
     if verbose:
         print("Done")
@@ -237,6 +252,12 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     if verbose:
         print("Copy to Host levels")
     levels = levels_gpu.get()
+    if verbose:
+        print("Copy to Host switchtimes_max")
+    switch_max = switch_max_gpu.get()
+    if verbose:
+        print("Copy to Host levels_max")
+    levels_max = levels_max_gpu.get()
     if verbose:
         print("Done")
     # As an alternative
@@ -248,10 +269,12 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
         print("Clearing memory of GPU")
     stack_gpu.gpudata.free()
     switch_gpu.gpudata.free()
+    switch_max_gpu.gpudata.free()
     convolStack_gpu.gpudata.free()
     levels_gpu.gpudata.free()
+    levels_max_gpu.gpudata.free()
 
-    return switch, levels
+    return switch, levels, switch_max, levels_max
 
 
 if __name__ == "__main__":
