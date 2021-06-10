@@ -14,7 +14,7 @@ To open the notebooks, download the files into a directory on your computer and 
 
 This will open a new page in your browser with a list of the available notebooks.
 
-The notebooks have been made using Python 3.X, and work well with the Anaconda Distribution
+The notebooks have been made using Python 3.8.X, and work well with the Anaconda Distribution
 
 License
 =======
