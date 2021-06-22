@@ -718,6 +718,8 @@ class StackImages:
 
         if not self._isSwitchAndStepsDone:
             self._isColorImageDone(ask=False, threshold=threshold)
+        elif threshold is not None :
+            self._threshold = threshold #It is necessary to be able to change the threshold even after the calculation of switches (when _isSwitchAndStepsDone is True)
 
         self.min_switch = np.min(self._switchTimes)
         self.max_switch = np.max(self._switchTimes)
