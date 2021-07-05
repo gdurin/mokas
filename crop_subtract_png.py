@@ -55,12 +55,13 @@ if __name__ == "__main__":
 	imagesDir = os.path.join(rootDir, "MeinzMAS185-000nOe-5.000V-796.0s_1")
 	saveDir = os.path.join(rootDir, "cropSubtractPng (tests)")
 	pattern = os.path.join(imagesDir, "seq1_*.tif")
-	backgroundFile = os.path.join(imagesDir, "seq1_00001.tif")
 
+
+	backgroundFile = os.path.join(imagesDir, "seq1_00001.tif") # None for no backgroubnd subtract
 		  # x1   y1   x2   y2
 	crop = (294, 321, 774, 760)
 
-	n_average = 10 #Number of images to take for the moving average. Put 1 for no averaging
+	n_average = 10 #Number of images to take for the moving average. Set to 1 for no averaging
 	# TODO : True doesn't work (Why ?)
 	keep_all_images = False #If False, for each n_average image we save only one image : the average of the last n_average images
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
 	#None for no filtering
 	gauss_radius = 1.5
 
-	#(0, 255) for nothing
+	#(0, 255) for nothing (8 bits images) (or (0, 65535) for 16 bits images)
 	gray_level = (110, 145)
 
 	#None for no renaming
@@ -85,7 +86,8 @@ if __name__ == "__main__":
 
 	if(backgroundFile is not None):
 		backgroundArray = io.imread(backgroundFile)
-		filenames.remove(backgroundFile)
+		if backgroundFile in filenames:
+			filenames.remove(backgroundFile)
 
 		if(crop is not None):
 			ymin, xmin, ymax, xmax = crop
