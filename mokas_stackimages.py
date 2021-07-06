@@ -153,7 +153,7 @@ class StackImages:
                  firstIm=None, lastIm=None, 
                  filtering=None, sigma=None, 
                  kernel_half_width_of_ones = 10, 
-                 kernel_sign = None, #Needed !
+                 kernel_sign = None,
                  #kernel_switch_position = 'center',
                  boundary=None, imCrop=False, 
                  initial_domain_region=None, subtract=None,

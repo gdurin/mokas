@@ -8,12 +8,13 @@ import mokas_gpu as gpu
 class gpuSkyrmions:
 
     def __init__(self, stackImages, convolSize=10, current_dev=None, ctx=None, block_size=(256,1), verbose=False):
+        #Init GPU
         deinitNeeded = False
-
         if(current_dev is None):
             current_dev, ctx, (free, total) = gpu.gpu_init(0)
             deinitNeeded = True
 
+        #Calculates the convolution
         self.convolStack = self._get_gpuConvolSkyrmions(stackImages, convolSize=convolSize, current_dev=current_dev, ctx=ctx, block_size=block_size, verbose=verbose)
 
         if(deinitNeeded):
@@ -21,12 +22,16 @@ class gpuSkyrmions:
 
 
     def getSwitchesSkyrmions(self, current_dev=None, ctx=None, block_size=(256,1), threshold=30, verbose=False):
+        """
+        Calculates and returns the switches (3D array). A threshold is needed from now on (see _get_gpuSwitchesSkyrmions below)
+        """
+        #init GPU
         deinitNeeded = False
-
         if(current_dev is None):
             current_dev, ctx, (free, total) = gpu.gpu_init(0)
             deinitNeeded = True
 
+        #Calculates the switches
         switches = self._get_gpuSwitchesSkyrmions(current_dev=current_dev, ctx=ctx, block_size=block_size, threshold=threshold, verbose=verbose)
 
         if(deinitNeeded):
@@ -37,7 +42,7 @@ class gpuSkyrmions:
     def _get_gpuConvolSkyrmions(self, stackImages, convolSize=10, current_dev=None, ctx=None, block_size=(256,1), verbose=False):
         """
         Return a 3D-array of the convolution
-
+        Same as gpuSwitchtims.py
         Parameters:
         ---------------
         """
@@ -211,11 +216,14 @@ class gpuSkyrmions:
 
     def _get_gpuSwitchesSkyrmions(self, current_dev=None, ctx=None, block_size=(256,1), threshold=30, verbose=False):
         """
-        Return a 3D-array with the positions of the steps in a sequence for each pixel (+1 for step "up", -1 for step "down", 0 for no step)
+        Return a 3D-array with the positions and height of the steps in a sequence for each pixel (+ for step "up", - for step "down", 0 for no step)
+        For example : switch[:, x, y] = [0   0   +50   0   0  -20   0   0   0   0   0   0   0   +100]
 
         Parameters:
         ---------------
         """
+
+        #Note : Only mod2_unique is commented : the two othe versions are easier
 
         # =========================================
         # Set the card to work with: DONE EXTERNALLY
@@ -264,7 +272,7 @@ class gpuSkyrmions:
                 int flat_id = idx + dim_x * idy + (dim_x * dim_y) * idz;      
                 if(abs(convolStack_gpu[flat_id])>threshold)
                 {
-                    switch_gpu[flat_id]=(convolStack_gpu[flat_id]>0)-(convolStack_gpu[flat_id]<0); //Sign of convolStack_gpu[flat_id]
+                    switch_gpu[flat_id]=convolStack_gpu[flat_id]; //(convolStack_gpu[flat_id]>0)-(convolStack_gpu[flat_id]<0); //Sign of convolStack_gpu[flat_id]
                 }
             }
         }
@@ -307,7 +315,7 @@ class gpuSkyrmions:
                         }
                         else if(localSwitchSign != actualSign)
                         {
-                            switch_gpu[idMax] = localSwitchSign;
+                            switch_gpu[idMax] = localSwitchSign*tmpMax;
 
                             localSwitchSign = actualSign;
                             tmpMax = abs(convolStack_gpu[flat_id]);
@@ -323,7 +331,7 @@ class gpuSkyrmions:
                 }
                 else if(localSwitchSign != 0)
                 {
-                    switch_gpu[idMax] = localSwitchSign;
+                    switch_gpu[idMax] = localSwitchSign*tmpMax;
 
                     localSwitchSign = 0;
                     tmpMax = 0;
@@ -350,10 +358,11 @@ class gpuSkyrmions:
 
             //Because of the convolution, there can be multiple "switch on" (or "switch off") side by side
             //The goal of the next variables is to select the best one from them
-            int localSwitchSign = 0;
-            int lastSwitchSign = 0;
-            int tmpMax = 0;
-            int idMax = -1;
+
+            int localSwitchSign = 0;    // Sign of the convolution at the previous image
+            int lastSwitchSign = 0;     // Sign of the convolution at the previous switch (allow to delect following steps with same sign (e.g.: 0  0  0 +1  0  0 +1  0  0), and avoid the second one to be taken into account)
+            int tmpMax = 0;             // Saves the actual local maximum to store it (with the right sign) in "switch" *after* returning under the threshold
+            int idMax = -1;             // Saves the flat_id of the actual local maximum to store it...
 
             for(int idz = 0; idz <dim_z; idz++)
             {
@@ -362,19 +371,19 @@ class gpuSkyrmions:
                 {
                     int actualSign = (convolStack_gpu[flat_id]>0)-(convolStack_gpu[flat_id]<0);
                     
-                    if(actualSign == lastSwitchSign && localSwitchSign == 0) //Avoid two identical steps : 0  0  0 +1  0  0 +1  0  0
+                    if(actualSign == lastSwitchSign && localSwitchSign == 0)        // Avoid two identical steps : 0  0  0 +1  0  0 +1  0  0
                         continue;
 
-                    if(localSwitchSign != 0)
+                    if(localSwitchSign != 0)                                // If we were already above the threshold, we have to compare the actual value to the maximum
                     {
                         if(localSwitchSign == actualSign && abs(convolStack_gpu[flat_id]) > tmpMax)
                         {
                             tmpMax = abs(convolStack_gpu[flat_id]);
                             idMax = flat_id;
                         }
-                        else if(localSwitchSign != actualSign)
+                        else if(localSwitchSign != actualSign)              // This is tricky : we can stay above the threshold (in absolute value) but with a different sign (e.g.: [0, 0, +255, -255, 0, 0]). Must be rare, but possible.
                         {
-                            switch_gpu[idMax] = localSwitchSign;
+                            switch_gpu[idMax] = localSwitchSign*tmpMax;
 
                             lastSwitchSign = localSwitchSign;
                             localSwitchSign = actualSign;
@@ -382,16 +391,16 @@ class gpuSkyrmions:
                             idMax = flat_id;
                         }
                     }
-                    else
+                    else                                                    // If we have just passed above the threshold, we directly set the variables (max, id_max, signs...) : no comparison to the max is needed
                     {
                         localSwitchSign = actualSign;
                         tmpMax = abs(convolStack_gpu[flat_id]);
                         idMax = flat_id;
                     }
                 }
-                else if(localSwitchSign != 0)
+                else if(localSwitchSign != 0)                               // If we are below the threshold but we were above just before, we need to set the local maximum to the right position to indicate a step (with the right sign)
                 {
-                    switch_gpu[idMax] = localSwitchSign;
+                    switch_gpu[idMax] = localSwitchSign*tmpMax;
 
                     lastSwitchSign = localSwitchSign;
                     localSwitchSign = 0;
