@@ -1880,6 +1880,7 @@ class StackImages:
                 properties = measure.regionprops(central_domain*1)[0]
             except:
                 print(properties)
+                
                 print("There is a problem with the central domain: properties not avaliable")
                 self.central_domain = central_domain
                 self.im = im

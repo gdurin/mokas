@@ -377,6 +377,13 @@ class StackImagesSkyrmions:
 
         return
 
+    def computeSwitched(self):
+        self._switched = []
+        for i in range(self.dimX):
+            for j in range(self.dimY):
+                if np.count_nonzero(self._switches[:, i, j]) != 0:
+                    self._switched.append((i, j))
+
     def getSwitched(self):
         """
         Calculates self._switched which is an
@@ -384,14 +391,13 @@ class StackImagesSkyrmions:
         (as tuples) where a shitch happens at
         anytime in the video
         """
-        self._switched = []
-        for i in range(self.dimX):
-            for j in range(self.dimY):
-                if np.count_nonzero(self._switches[:, i, j]) != 0:
-                    self._switched.append((i, j))
+        if self._switched is None:
+            self.computeSwitched()
 
         return self._switched
 
-    def showSwitched():
-        pass
-        #Todo : plot each switched pixel in a color, the other ones with another
+    def plotSwitched(self):
+        sw = [[len(self._switches[:, i, j].nonzero()[0]) == 0 for j in range(self.dimY)] for i in range(self.dimX)]
+
+        plt.imshow(sw)
+        plt.show()

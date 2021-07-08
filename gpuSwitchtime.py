@@ -1,9 +1,12 @@
 import numpy as np
 import scipy.ndimage as nd
 #import pycuda.autoinit
+import pycuda as cuda
+
 from pycuda.gpuarray import to_gpu
 from pycuda.compiler import SourceModule
 import mokas_gpu as mkGpu
+
 
 
 def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1, 
@@ -18,6 +21,7 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
     # =========================================
     # Set the card to work with: DONE EXTERNALLY
     # =========================================
+
     if verbose:
         print("working on card %s" % current_dev.name())
     used_device = ctx.get_device()
@@ -278,9 +282,14 @@ def get_gpuSwitchTime(stackImages, convolSize=10, multiplier=1,
 
 
 if __name__ == "__main__":
+
     import time
     import mokas_gpu as gpu
-    current_dev, ctx, (free, total) = gpu.gpu_init(1)
+    
+    
+    
+    current_dev, ctx, (free, total) = gpu.gpu_init(0)
+
     # Prepare a 3D array of random data as int32
     dim_x = 150
     dim_y = 150 
@@ -291,6 +300,7 @@ if __name__ == "__main__":
     # Call the GPU kernel
     kernel = np.array([-1]*15+[1]*15)
     t0 = time.time()
+    print("gbi")
     gpuswitch, gpulevels = get_gpuSwitchTime(a, kernel, current_dev=current_dev, ctx=ctx, block_size=(64,4))	
     timeGpu = time.time() - t0
     # Make the same calculation on the CPU

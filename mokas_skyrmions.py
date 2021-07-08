@@ -53,10 +53,7 @@ class Skyrmions(StackImagesSkyrmions):
 
         #get the positions where to compute the frequency
         if positions is None:
-            if self._switched is None:
-                positions = self.getSwitched()
-            else:
-                positions = self._switched
+            positions = self.getSwitched()
 
         if 0 < n_px < len(positions):
             step = len(positions)/n_px
@@ -104,7 +101,8 @@ class Skyrmions(StackImagesSkyrmions):
 
 if __name__ == "__main__":
     stack = Skyrmions("/home/mokas/Meas/Creep/PtCoPt/M2 modified for skyrmions/Renamed", "filename*.png")
-    stack.getSwitches(threshold=100, showHist=False)
+    stack.getSwitches(threshold=120, showHist=False)
     stack.showPixelTimeSequence(pixel=(400, 250))
     stack.getPeriod(n_px = 5, showFFT=True)
     stack.getPeriod(fromVid=False, n_px = 5)
+    stack.plotSwitched()
