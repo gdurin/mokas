@@ -127,10 +127,13 @@ class RunWires:
 if __name__ == "__main__":
     plt.close("all")
     imParameters = {}
+
     try:
         choice = sys.argv[1]
+
     except:
         choice = 'irr'
+    print(choice)
     if choice == 'half_moon':
         rootDir = "/home/gf/Meas/Creep/CoFeB/Film/Non-irradiated/Half-moon/run3/02_nonirradiatedFilm_0.14A"
         #imParameters['imCrop'] = (200,1040,500,1390)
@@ -188,8 +191,8 @@ if __name__ == "__main__":
     elif choice == 'LPN':
         # example
         # run run_visualBarkh_on_wires IEF_old 20um 0.145 2
-        width, set_current, n_wire = sys.argv[2:]
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
+        width, set_current, n_wire = sys.argv[2:] 
+        rootDir = "/home/mokas/Meas/Creep/MeinzMAS185/CoFeB/Wires/Ta_CoFeB_MgO_wires_{0}/{1}/{1}_{2}A".format(choice, width, set_current)
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
@@ -207,7 +210,7 @@ if __name__ == "__main__":
         subdir_pattern = "%s_%sA_10fps_*"  % (width, set_current)
 
     else:
-        print("Check the path!")
+        print("Check the path! ")
         sys.exit()
     n_wire = np.int(n_wire)
     wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)

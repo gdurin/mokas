@@ -226,7 +226,7 @@ class Creep:
 			if visualization_library == 'mpl':
 				_fig1, _fig2, _fig3 = self.fig1, self.fig2, self.fig3
 				_fig4, _fig5, _fig6 = self.fig4, self.fig5, self.fig6
-				_fig7, = self.fig7
+				_fig7 = self.fig7
 				_ax1, _ax2, _ax3 = self.axs1[i,j], self.axs2[i,j], self.axs3[i,j]
 				_ax4, _ax5, _ax6 = self.axs4[i,j], self.axs5[i,j], self.axs6[i,j]
 				_ax7 = self.axs7
@@ -236,10 +236,10 @@ class Creep:
 				_ax1, _ax2, _ax3, _ax4, _ax5, _ax6, _ax7 = n_bokeh_plots * [None]
 				_ax7 = [_ax7, _ax7]
 
-				if(self.imParameters['imCrop'] is not None):
-					(x0, y0), (x1, y1) = self.imParameters['imCrop']
-				else:
-					x0, y0, x1, y1 = 0, 0, imArray.imWidth, imArray.imHeight
+			if(self.imParameters['imCrop'] is not None):
+				(x0, y0), (x1, y1) = self.imParameters['imCrop']
+			else:
+				x0, y0, x1, y1 = 0, 0, imArray.imHeight, imArray.imWidth  # /!\ X and Y inverted !
 
 				
 			# Figure 1 : color Image of DW motion
@@ -306,7 +306,7 @@ class Creep:
 				for axs in [figs[1],figs[3]]:
 					H = y1 - y0
 					#axs.line(xcnts, H-ycnts, color=bx_colors[n],line_width=2,legend_label=str(label))
-					axs.line(xcnts, H-ycnts, color='black',line_width=2)
+					axs.line(xcnts, H-ycnts, color='red',line_width=2)
 					axs.x_range = Range1d(0,x1-x0)
 					axs.y_range = Range1d(0,y1-y0)
 
