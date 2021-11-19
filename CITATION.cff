@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Durin"
+    given-names: "Gianfranco"
+    orcid: https://orcid.org/0000-0002-0821-7541
+title: "MOKAS: a MOKe Analysis Software"
+version: 0.8.2
+doi: 10.5281/zenodo.5714378
+date-released: 2021-11-19
+url: "https://github.com/gdurin/mokas
+
