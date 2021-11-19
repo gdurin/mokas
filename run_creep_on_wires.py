@@ -162,14 +162,14 @@ if __name__ == "__main__":
 
     elif choice == 'LPN_20um':
         set_current = "0.14"
-        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_LPN/20um_%sA" % set_current
+        rootDir = "/home/gf/Meas/Creep/CoFeB/Wires/Arianna/Ta_CoFeB_MgO_wires_LPN/20um/20um_%sA" % set_current
         if not os.path.isdir(rootDir):
             print("Chech the path")
             sys.exit()
         subdir_pattern = "20um_%sA_10fps_*"  % set_current
         filename_suffix = "_MMStack_Pos0.ome.tif"
         n_wire = 2
-        wires = RunWires(rootDir, subdir_pattern, filename_suffix, n_wire=n_wire, erase_small_events_percent=None)
+        wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
         wires.plot_results()
 
     # As on June 26, this is the example to follow
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         sys.exit()
     n_wire = np.int(n_wire)
     wires = RunWires(rootDir, subdir_pattern, n_wire=n_wire, erase_small_events_percent=None)
-    wires.plot_results()
+    wires.plot_results(False)
     wires.save_hdf5()
     wires.save_figs()
         
